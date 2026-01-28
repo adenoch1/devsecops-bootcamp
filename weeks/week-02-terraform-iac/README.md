@@ -1,4 +1,5 @@
 # Week 02 – Terraform IaC + ECS Fargate (Infrastructure DevSecOps)
+[![terraform-ci](https://github.com/adenoch1/devsecops-bootcamp/actions/workflows/terraform-ci.yml/badge.svg)](https://github.com/adenoch1/devsecops-bootcamp/actions/workflows/terraform-ci.yml)
 
 In Week 2 of the DevSecOps Bootcamp, we move from application CI (Week 1) into **Infrastructure as Code**.
 
