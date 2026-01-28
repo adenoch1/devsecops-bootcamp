@@ -37,8 +37,10 @@ RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
 # Upgrade SYSTEM pip to fixed version (Trivy sees this one too)
 # CVE-2025-8869 fixed in pip 25.3
-RUN python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools && \
-    python -m pip --version
+RUN python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools "wheel==0.46.2" && \
+    python -m pip --version && \
+    python -c "import wheel; print('system wheel =', wheel.__version__)"
+
 
 # Copy venv from builder
 COPY --from=builder /opt/venv /opt/venv
