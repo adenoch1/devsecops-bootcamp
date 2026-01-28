@@ -1,5 +1,5 @@
 # Week 01 – CI/CD with Security (DevSecOps Foundations)
-[![Release Pipeline](https://github.com/adenoch1/devsecops-project1/actions/workflows/03-release.yml/badge.svg)](https://github.com/adenoch1/devsecops-project1/actions/workflows/03-release.yml)
+[![Release](https://github.com/adenoch1/devsecops-bootcamp/actions/workflows/03-release.yml/badge.svg)](https://github.com/adenoch1/devsecops-bootcamp/actions/workflows/03-release.yml)
 
 In Week 1 of the DevSecOps Bootcamp, we build a production-style CI/CD pipeline for a Flask application using GitHub Actions, with security embedded at every stage.
 
