@@ -14,7 +14,7 @@ COPY app/requirements.txt /app/requirements.txt
 
 # Create venv, upgrade pip to fixed version, install deps
 RUN python -m venv /opt/venv && \
-    /opt/venv/bin/python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools wheel && \
+    /opt/venv/bin/python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools wheel==0.46.2 && \
     /opt/venv/bin/pip install --no-cache-dir -r /app/requirements.txt && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade "jaraco.context==6.1.0" && \
     /opt/venv/bin/pip check && \
