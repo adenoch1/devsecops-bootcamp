@@ -57,7 +57,6 @@ resource "aws_kms_alias" "logs" {
   target_key_id = aws_kms_key.logs.key_id
 }
 
-# ✅ FIX: Expand key policy so GitHubActions roles can use the key *via DynamoDB* (scoped)
 resource "aws_kms_key" "dynamodb" {
   description             = "KMS CMK for Terraform lock DynamoDB table"
   deletion_window_in_days = 10
