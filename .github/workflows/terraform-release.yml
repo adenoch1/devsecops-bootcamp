@@ -1,0 +1,458 @@
+name: terraform-release
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "infra/**"
+      - "modules/**"
+      - "app/**"
+      - "docker/**"
+      - ".github/workflows/terraform-release.yml"
+      - ".github/workflows/03-release.yml"
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "deploy or destroy"
+        required: true
+        default: "deploy"
+        type: choice
+        options: [deploy, destroy]
+      fqdn:
+        description: "Custom domain to test (example: app.clevernews.org). Optional."
+        required: false
+        default: ""
+      smoke_path:
+        description: "Path to test (example: /health)"
+        required: true
+        default: "/health"
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: terraform-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VERSION: "1.6.6"
+  WORKDIR: "infra/envs/dev"
+
+jobs:
+  ######################################################
+  # Gate 1 (DEV): Infra Bootstrap (safe even before image)
+  ######################################################
+  infra_bootstrap:
+    name: Gate 1 — Infra Bootstrap (dev)
+    if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
+    runs-on: ubuntu-latest
+    environment: dev
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_APPLY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan (bootstrap)
+        run: |
+          terraform plan \
+            -out=tfplan.bootstrap \
+            -var="container_image_tag=bootstrap" \
+            -var="desired_count=0"
+
+      - name: Terraform apply (bootstrap)
+        run: terraform apply -auto-approve tfplan.bootstrap
+
+      - name: Helpful outputs (copy for GoDaddy / debugging)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "==== Terraform outputs ===="
+          terraform output || true
+          echo ""
+          echo "If you need the ALB DNS name for GoDaddy CNAME:"
+          if terraform output -raw alb_dns_name >/dev/null 2>&1; then
+            echo "ALB DNS: $(terraform output -raw alb_dns_name)"
+          elif terraform output -raw alb_dns >/dev/null 2>&1; then
+            echo "ALB DNS: $(terraform output -raw alb_dns)"
+          else
+            echo "ALB DNS output not found. Add an output like: output \"alb_dns_name\" { value = aws_lb.<name>.dns_name }"
+          fi
+
+  #######################################################
+  # Build & Push Image (ECR) — after infra exists
+  ########################################################
+  build_image:
+    name: Build + Push Image (ECR)
+    needs: infra_bootstrap
+    if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
+    uses: ./.github/workflows/03-release.yml
+    secrets: inherit
+    with:
+      tfvars_path: "infra/envs/dev/terraform.tfvars"
+      dockerfile_path: "docker/Dockerfile"
+      build_context: "."
+      image_tag: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  #######################################################
+  # Deploy: apply new image tag (scale ECS up)
+  #######################################################
+  deploy:
+    name: Deploy (dev)
+    needs: build_image
+    if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
+    runs-on: ubuntu-latest
+    environment: dev
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_APPLY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform plan (deploy)
+        run: |
+          terraform plan \
+            -out=tfplan.deploy \
+            -var="container_image_tag=${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" \
+            -var="desired_count=1"
+
+      - name: Terraform apply (deploy)
+        run: terraform apply -auto-approve tfplan.deploy
+
+      - name: Wait for ECS/ALB targets to become healthy (fail with evidence)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          CLUSTER="$(terraform output -raw ecs_cluster_name)"
+          SERVICE="$(terraform output -raw ecs_service_name)"
+          TG_ARN="$(terraform output -raw alb_target_group_arn)"
+
+          echo "Waiting for ECS service to become stable: ${CLUSTER}/${SERVICE}"
+          if ! aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"; then
+            echo "::error::ECS service did not become stable. Dumping diagnostics..."
+            echo "---- ECS events ----"
+            aws ecs describe-services \
+              --cluster "${CLUSTER}" \
+              --services "${SERVICE}" \
+              --query "services[0].events[0:20].message" \
+              --output table || true
+
+            echo "---- STOPPED tasks (latest 5) ----"
+            STOPPED="$(aws ecs list-tasks --cluster "${CLUSTER}" --service-name "${SERVICE}" --desired-status STOPPED --max-results 5 --query 'taskArns' --output text || true)"
+            echo "${STOPPED:-<none>}"
+
+            if [ -n "${STOPPED}" ] && [ "${STOPPED}" != "None" ]; then
+              for t in ${STOPPED}; do
+                echo "---- Task: $t ----"
+                aws ecs describe-tasks \
+                  --cluster "${CLUSTER}" \
+                  --tasks "$t" \
+                  --query "tasks[0].{last:lastStatus,stopCode:stopCode,stoppedReason:stoppedReason,exit:containers[0].exitCode,reason:containers[0].reason}" \
+                  --output json || true
+              done
+            fi
+
+            echo "---- Target health ----"
+            aws elbv2 describe-target-health \
+              --target-group-arn "${TG_ARN}" \
+              --query "TargetHealthDescriptions[].{id:Target.Id,state:TargetHealth.State,reason:TargetHealth.Reason,desc:TargetHealth.Description}" \
+              --output table || true
+
+            exit 1
+          fi
+
+          echo "Checking target health for: ${TG_ARN}"
+          for i in {1..30}; do
+            STATES="$(aws elbv2 describe-target-health --target-group-arn "${TG_ARN}" --query "TargetHealthDescriptions[].TargetHealth.State" --output text || true)"
+            echo "Attempt ${i} — target states: ${STATES:-<none>}"
+            if echo "${STATES}" | grep -q "healthy"; then
+              echo "Target group has healthy targets ✅"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::error::No healthy targets observed. Dumping target health details..."
+          aws elbv2 describe-target-health \
+            --target-group-arn "${TG_ARN}" \
+            --query "TargetHealthDescriptions[].{id:Target.Id,state:TargetHealth.State,reason:TargetHealth.Reason,desc:TargetHealth.Description}" \
+            --output table || true
+          exit 1
+
+  #######################################################
+  # DNS Smoke Test (non-blocking if FQDN isn't ready)
+  #######################################################
+  dns_smoke:
+    name: DNS Smoke Test (non-blocking)
+    needs: deploy
+    if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
+    runs-on: ubuntu-latest
+    environment: dns
+
+    steps:
+      - name: Resolve FQDN and path
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FQDN_INPUT="${{ inputs.fqdn }}"
+          SECRET_FQDN="${{ secrets.FQDN }}"
+
+          if [ -n "$FQDN_INPUT" ]; then
+            echo "FQDN=$FQDN_INPUT" >> $GITHUB_ENV
+          elif [ -n "$SECRET_FQDN" ]; then
+            echo "FQDN=$SECRET_FQDN" >> $GITHUB_ENV
+          else
+            echo "FQDN=" >> $GITHUB_ENV
+          fi
+
+          echo "SMOKE_PATH=${{ inputs.smoke_path }}" >> $GITHUB_ENV
+
+      - name: Skip if FQDN not configured (warning only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${FQDN}" ]; then
+            echo "::warning::FQDN is not set. Skipping DNS smoke test."
+            echo "::warning::Set secret FQDN (example: app.clevernews.org) after you create your GoDaddy CNAME."
+            exit 0
+          fi
+          echo "FQDN configured: ${FQDN}"
+
+      - name: DNS resolution check (short)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in {1..6}; do
+            echo "Attempt $i..."
+            A="$(dig +short A "${FQDN}" || true)"
+            CNAME="$(dig +short CNAME "${FQDN}" || true)"
+            echo "A: ${A:-<none>}"
+            echo "CNAME: ${CNAME:-<none>}"
+            if [ -n "$A" ] || [ -n "$CNAME" ]; then
+              echo "DNS resolves"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::warning::DNS did not resolve yet (propagation may still be happening)."
+          exit 0
+
+      - name: HTTPS smoke test (warning-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PATH_ONLY="${SMOKE_PATH}"
+          if [[ "$PATH_ONLY" != /* ]]; then PATH_ONLY="/$PATH_ONLY"; fi
+          URL="https://${FQDN}${PATH_ONLY}"
+          echo "Testing URL: $URL"
+
+          for i in {1..10}; do
+            echo "Attempt $i..."
+            code="$(curl -k -s -o /dev/null -w "%{http_code}" "$URL" || true)"
+            echo "HTTP status: $code"
+            if [[ "$code" =~ ^2[0-9][0-9]$ ]] || [[ "$code" =~ ^3[0-9][0-9]$ ]]; then
+              echo "Smoke test passed"
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "::warning::HTTPS smoke test did not pass yet. Check DNS/CNAME/TLS/ALB target health."
+          exit 0
+
+  ########################################################
+  # Destroy (gated) — appears after deploy/smoke, waits for approval
+  #########################################################
+  destroy:
+    name: Destroy (gated)
+    needs: dns_smoke
+    if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.action == 'destroy') }}
+    runs-on: ubuntu-latest
+    environment: destroy
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKDIR }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_APPLY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Disable ALB deletion protection (controlled teardown) - safe on reruns
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NAME_PREFIX="devsecops-flask-dev"
+
+          echo "Searching for ALB(s) to disable deletion protection..."
+
+          ALB_ARNS="$(aws elbv2 describe-load-balancers \
+            --query "LoadBalancers[?contains(LoadBalancerName, \`${NAME_PREFIX}\`)].LoadBalancerArn" \
+            --output text || true)"
+
+          if [ -z "${ALB_ARNS}" ] || [ "${ALB_ARNS}" = "None" ]; then
+            echo "No matching ALB found. Skipping deletion protection disable."
+            exit 0
+          fi
+
+          for ALB_ARN in ${ALB_ARNS}; do
+            echo "Disabling deletion protection for: ${ALB_ARN}"
+            aws elbv2 modify-load-balancer-attributes \
+              --load-balancer-arn "${ALB_ARN}" \
+              --attributes Key=deletion_protection.enabled,Value=false
+          done
+
+      - name: Destroy with IGW dependency retry (public IP mappings / NAT GW)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NAME_PREFIX="devsecops-flask-dev"
+
+          get_vpc_id() {
+            local vpc=""
+
+            # 1) Best: Terraform output (sanitize in case Terraform prints warnings to stdout)
+            if terraform output -no-color -raw vpc_id >/dev/null 2>&1; then
+              vpc="$(terraform output -no-color -raw vpc_id 2>/dev/null | tr -d '\r\n' | grep -Eo 'vpc-[0-9a-f]+' || true)"
+            fi
+
+            # 2) Fallback: Discover by VPC Name tag pattern (works even when outputs are missing)
+            if [ -z "${vpc}" ]; then
+              vpc="$(aws ec2 describe-vpcs \
+                --filters "Name=tag:Name,Values=*${NAME_PREFIX}*" \
+                --query "Vpcs[0].VpcId" \
+                --output text 2>/dev/null || true)"
+              if ! echo "${vpc}" | grep -Eq '^vpc-[0-9a-f]+'; then
+                vpc=""
+              fi
+            fi
+
+            echo "${vpc}"
+          }
+
+          wait_for_public_mappings_to_clear() {
+            local vpc_id="$1"
+            echo "Waiting for AWS to release public IP mappings in VPC: ${vpc_id}"
+
+            for i in {1..60}; do
+              # ENIs with public IP associations (instances, NAT GWs, etc.)
+              local eni_count
+              eni_count="$(aws ec2 describe-network-interfaces \
+                --filters "Name=vpc-id,Values=${vpc_id}" \
+                --query "length(NetworkInterfaces[?Association.PublicIp!=null])" \
+                --output text 2>/dev/null || echo "0")"
+
+              # NAT gateways that are not fully deleted yet
+              local nat_count
+              nat_count="$(aws ec2 describe-nat-gateways \
+                --filter "Name=vpc-id,Values=${vpc_id}" \
+                --query "length(NatGateways[?State!='deleted'])" \
+                --output text 2>/dev/null || echo "0")"
+
+              echo "Attempt ${i} — ENIs with PublicIp: ${eni_count} | NAT GWs not deleted: ${nat_count}"
+
+              if [ "${eni_count}" = "0" ] && [ "${nat_count}" = "0" ]; then
+                echo "Public mappings cleared"
+                return 0
+              fi
+
+              sleep 15
+            done
+
+            echo "::warning::Timeout waiting for public mappings to clear. Proceeding anyway."
+            return 0
+          }
+
+          try_destroy() {
+            # Use low parallelism for more predictable teardown ordering (helps with ALB/NAT/IGW)
+            terraform destroy -auto-approve -parallelism=1
+          }
+
+          VPC_ID="$(get_vpc_id)"
+          if [ -n "${VPC_ID}" ]; then
+            echo "Detected VPC: ${VPC_ID}"
+          else
+            echo "::warning::Could not determine VPC ID (no outputs + no matching VPC tag:Name). Will still attempt destroy."
+          fi
+
+          echo "Running terraform destroy (attempt 1)..."
+          set +e
+          try_destroy
+          rc=$?
+          set -e
+
+          if [ "$rc" -eq 0 ]; then
+            echo "Destroy completed"
+            exit 0
+          fi
+
+          echo "::warning::Destroy attempt 1 failed (exit ${rc}). Checking for IGW dependency / AWS eventual-consistency delays..."
+
+          # If we can detect the VPC, wait for NAT GW/ENI public IP mappings to clear, then retry once.
+          if [ -n "${VPC_ID}" ]; then
+            wait_for_public_mappings_to_clear "${VPC_ID}"
+          fi
+
+          echo "Running terraform destroy (attempt 2)..."
+          try_destroy

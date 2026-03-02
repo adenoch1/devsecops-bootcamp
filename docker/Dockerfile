@@ -1,62 +1,80 @@
-# =========================================================
-# STAGE 1 — Build Dependencies
-# =========================================================
-FROM python:3.11-alpine AS builder
+# syntax=docker/dockerfile:1
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# -----------------------------
+# Stage 1: builder (install deps)
+# -----------------------------
+FROM python:3.11-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev linux-headers
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m pip install --upgrade pip==26.0.1 wheel==0.46.3 setuptools
 
 COPY app/requirements.txt /app/requirements.txt
-
-# Create venv, upgrade pip to fixed version, install deps
-RUN python -m venv /opt/venv && \
-    /opt/venv/bin/python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools wheel==0.46.2 && \
-    /opt/venv/bin/pip install --no-cache-dir -r /app/requirements.txt && \
-    /opt/venv/bin/pip install --no-cache-dir --upgrade "jaraco.context==6.1.0" && \
-    /opt/venv/bin/pip check && \
-    # Remove any stale metadata if it exists
-    find /opt/venv -type d -name "jaraco.context-5.3.0.dist-info" -prune -exec rm -rf {} + || true && \
-    find /opt/venv -type d -name "pip-24.0.dist-info" -prune -exec rm -rf {} + || true
+RUN python -m pip install --prefix=/install -r /app/requirements.txt
 
 
-# =========================================================
-# STAGE 2 — Runtime Image
-# =========================================================
-FROM python:3.11-alpine AS runtime
+# -----------------------------
+# Stage 2: runtime
+# -----------------------------
+FROM python:3.11-slim AS runtime
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TMPDIR=/tmp \
+    # Ensure gunicorn uses a writable temp dir (in addition to CLI flag below)
+    GUNICORN_CMD_ARGS="--worker-tmp-dir /tmp" \
+    # Avoid python trying to write __pycache__ into read-only directories
+    PYTHONPYCACHEPREFIX=/tmp/pycache
 
 WORKDIR /app
 
-RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
+# gosu lets us drop privileges after fixing /tmp perms
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates gosu \
+    && rm -rf /var/lib/apt/lists/*
 
-# Upgrade SYSTEM pip to fixed version (Trivy sees this one too)
-# CVE-2025-8869 fixed in pip 25.3
-RUN python -m pip install --upgrade --no-cache-dir "pip==25.3" setuptools "wheel==0.46.2" && \
-    python -m pip --version && \
-    python -c "import wheel; print('system wheel =', wheel.__version__)"
+# Copy installed deps from builder into runtime
+COPY --from=builder /install /usr/local
 
-
-# Copy venv from builder
-COPY --from=builder /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Remove stale dist-info from common system locations (where Trivy finds METADATA)
-RUN find /usr/local/lib -type d -name "jaraco.context-5.3.0.dist-info" -prune -exec rm -rf {} + || true && \
-    find /usr/local/lib -type d -name "pip-24.0.dist-info" -prune -exec rm -rf {} + || true && \
-    find /usr/lib -type d -name "jaraco.context-5.3.0.dist-info" -prune -exec rm -rf {} + || true && \
-    find /usr/lib -type d -name "pip-24.0.dist-info" -prune -exec rm -rf {} + || true
-
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-
+# Copy application
 COPY app /app
-RUN chown -R appuser:appgroup /app
-USER appuser
+
+# Create non-root user (we will drop to this user in entrypoint)
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+
+# Entrypoint: fix temp dirs permissions (important when /tmp is volume-mounted),
+# then run the command as appuser.
+RUN cat > /usr/local/bin/entrypoint.sh <<'EOF' \
+  && chmod +x /usr/local/bin/entrypoint.sh
+#!/bin/sh
+set -eu
+
+# Ensure temp dirs exist. In ECS with volume-mounted /tmp, permissions can be restrictive.
+mkdir -p /tmp /var/tmp /usr/tmp /tmp/pycache
+
+# Sticky-bit so any user can create temp files safely
+chmod 1777 /tmp /var/tmp /usr/tmp || true
+chmod 777 /tmp/pycache || true
+
+# Drop privileges and run
+exec gosu appuser "$@"
+EOF
 
 EXPOSE 5000
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app", "--workers", "3", "--threads", "2"]
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# Also pass --worker-tmp-dir explicitly (belt + suspenders)
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "--worker-tmp-dir", "/tmp", "app:app"]
