@@ -39,6 +39,11 @@ jobs:
           echo "ref:   $GITHUB_REF"
           echo "sha:   $GITHUB_SHA"
 
+      - name: Debug OIDC claims
+        uses: github/actions-oidc-debugger@v1
+        with:
+          audience: sts.amazonaws.com
+
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
