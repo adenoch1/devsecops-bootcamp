@@ -1,0 +1,181 @@
+name: terraform-security
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "infra/**/*.tf"
+      - "infra/**/terraform.tfvars"
+      - "modules/**/*.tf"
+      - "policy/**"
+      - ".github/workflows/terraform-security.yml"
+
+permissions:
+  id-token: write
+  contents: read
+  security-events: write
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_VERSION: "1.6.6"
+
+jobs:
+  validate-scan-policy-plan:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra/envs/dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PLAN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          audience: sts.amazonaws.com
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform fmt (check)
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          targets=("infra")
+          if [ -d "modules" ]; then targets+=("modules"); fi
+          if [ -d "infra/modules" ]; then targets+=("infra/modules"); fi
+          terraform fmt -check -recursive "${targets[@]}"
+
+      - name: Terraform init
+        run: terraform init -input=false -reconfigure
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Ensure tfvars exists for plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f terraform.tfvars ]; then
+            echo "Found terraform.tfvars"
+          else
+            echo "terraform.tfvars missing — creating .ci.auto.tfvars"
+            {
+              echo 'aws_region  = "ca-central-1"'
+              echo 'project     = "devsecops-testing"'
+              echo 'environment = "dev"'
+              echo 'owner       = "enoch"'
+              echo ''
+              echo 'vpc_cidr = "192.168.0.0/16"'
+              echo ''
+              echo 'acm_certificate_arn = "arn:aws:acm:ca-central-1:000000000000:certificate/00000000-0000-0000-0000-000000000000"'
+              echo ''
+              echo 'alb_log_prefix          = "alb-access"'
+              echo 'flow_log_retention_days = 30'
+              echo 'ecs_log_retention_days  = 14'
+              echo ''
+              echo 'health_check_path = "/health"'
+            } > .ci.auto.tfvars
+          fi
+
+      - name: Install Trivy
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -y
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -y
+          sudo apt-get install -y trivy
+          trivy --version
+
+      - name: Ensure Trivy ignore for AWS-0104 (ECS tasks HTTPS egress)
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          # AWS-0104 is triggered by allowing 443 egress to 0.0.0.0/0 which is required
+          # for ECS tasks in private subnets to reach ECR/CloudWatch/STS via NAT (ephemeral project).
+          touch .trivyignore
+          grep -qxF "AWS-0104" .trivyignore || echo "AWS-0104" >> .trivyignore
+          echo "Current .trivyignore:"
+          tail -n +1 .trivyignore || true
+
+      - name: Trivy IaC Scan (Terraform)
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "infra/envs/dev/terraform.tfvars" ]; then
+            trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 \
+              --tf-vars "infra/envs/dev/terraform.tfvars" infra --ignorefile .trivyignore
+          else
+            trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 \
+              --tf-vars "infra/envs/dev/.ci.auto.tfvars" infra --ignorefile .trivyignore
+          fi
+
+      - name: Install Checkov (CLI)
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip
+          pip3 install "checkov>=3.2.0"
+          checkov --version
+
+      - name: Checkov (CLI) - Terraform policy scan (SARIF)
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # IMPORTANT: Checkov expects a SINGLE value after --skip-check (comma-separated)
+          SKIP="CKV2_AWS_62,CKV2_AWS_76,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_144"
+
+          checkov -d . \
+            --framework terraform \
+            --skip-check "$SKIP" \
+            --quiet \
+            --output sarif \
+            --output-file-path results.sarif
+
+      - name: Upload Checkov SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+
+      - name: Terraform plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f terraform.tfvars ]; then
+            terraform plan -input=false -refresh=true -var-file="terraform.tfvars" -out=tfplan.binary
+          else
+            terraform plan -input=false -refresh=true -var-file=".ci.auto.tfvars" -out=tfplan.binary
+          fi
+
+      - name: Terraform show (json)
+        run: terraform show -json tfplan.binary > tfplan.json
+
+      - name: Install Conftest
+        working-directory: .
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -qO conftest.tar.gz https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          conftest --version
+
+      - name: Conftest Policy Gate (OPA)
+        run: conftest test tfplan.json -p ../../../policy/conftest --all-namespaces

@@ -1,3 +1,5 @@
+# Dev environment root module.
+
 locals {
   tags = {
     Project     = var.project
@@ -9,11 +11,48 @@ locals {
   name_prefix = "${var.project}-${var.environment}"
 }
 
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+output "account_id" {
+  value       = data.aws_caller_identity.current.account_id
+  description = "AWS account ID (sanity check for CI/OIDC)"
+}
+
+output "region" {
+  value       = data.aws_region.current.id
+  description = "AWS region (sanity check for CI/OIDC)"
+}
+
+module "logging" {
+  source      = "../../modules/logging"
+  name_prefix = local.name_prefix
+  tags        = local.tags
+
+  providers = {
+    aws         = aws
+    aws.replica = aws.replica
+  }
+
+  aws_region = var.aws_region
+
+  alb_log_prefix = var.alb_log_prefix
+
+  lifecycle_expire_days  = var.lifecycle_expire_days
+  lifecycle_glacier_days = var.lifecycle_glacier_days
+
+  replication_enabled = var.replication_enabled
+  replication_region  = var.replication_region
+}
+
 module "network" {
   source      = "../../modules/network"
   name_prefix = local.name_prefix
   vpc_cidr    = var.vpc_cidr
   tags        = local.tags
+
+  flow_log_retention_days     = var.flow_log_retention_days
+  cloudwatch_logs_kms_key_arn = module.logging.cloudwatch_logs_kms_key_arn
 }
 
 module "ecr" {
@@ -33,19 +72,30 @@ module "ecs" {
   name_prefix = local.name_prefix
   tags        = local.tags
 
-  vpc_id             = module.network.vpc_id
+  vpc_id   = module.network.vpc_id
+  vpc_cidr = var.vpc_cidr
+
   public_subnet_ids  = module.network.public_subnet_ids
   private_subnet_ids = module.network.private_subnet_ids
 
   ecr_repository_url = module.ecr.repository_url
+  depends_on         = [module.logging]
 
   ecs_task_execution_role_arn = module.iam.ecs_task_execution_role_arn
   ecs_task_role_arn           = module.iam.ecs_task_role_arn
+  terraform_role_name         = var.terraform_role_name
 
   app_port            = var.app_port
   container_image_tag = var.container_image_tag
 
-  desired_count = var.ecs_desired_count
+  desired_count = var.desired_count
   task_cpu      = var.task_cpu
   task_memory   = var.task_memory
+
+  acm_certificate_arn         = var.acm_certificate_arn
+  alb_log_bucket_name         = module.logging.alb_log_bucket_name
+  alb_log_prefix              = var.alb_log_prefix
+  cloudwatch_logs_kms_key_arn = module.logging.cloudwatch_logs_kms_key_arn
+  log_retention_days          = var.log_retention_days
+  health_check_path           = var.health_check_path
 }
