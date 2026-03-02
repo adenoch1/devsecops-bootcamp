@@ -39,10 +39,32 @@ jobs:
           echo "ref:   $GITHUB_REF"
           echo "sha:   $GITHUB_SHA"
 
-      - name: Debug OIDC claims
-        uses: github/actions-oidc-debugger@v1
-        with:
-          audience: sts.amazonaws.com
+      - name: Debug OIDC token claims (no Docker)
+        shell: bash
+        env:
+          AUDIENCE: sts.amazonaws.com
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, json, base64, urllib.request
+
+          req = urllib.request.Request(
+              os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=" + os.environ["AUDIENCE"],
+              headers={"Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]}
+          )
+          token = json.loads(urllib.request.urlopen(req).read().decode())["value"]
+
+          parts = token.split(".")
+          payload = parts[1] + "=" * (-len(parts[1]) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+
+          # Print the important ones for trust policy matching:
+          keys = ["iss", "aud", "sub", "repository", "ref", "event_name", "job_workflow_ref", "actor"]
+          print("=== OIDC CLAIMS (selected) ===")
+          for k in keys:
+              if k in claims:
+                  print(f"{k}: {claims[k]}")
+          PY
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
