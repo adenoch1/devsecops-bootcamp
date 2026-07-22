@@ -157,6 +157,8 @@ jobs:
             -out=tfplan.deploy \
             -var="container_image_tag=${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" \
             -var="desired_count=1" \
+            -var="git_sha=${{ github.sha }}" \
+            -var="build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Terraform apply (deploy)

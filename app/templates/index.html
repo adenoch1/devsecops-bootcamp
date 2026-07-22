@@ -3,59 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Portfolio</title>
+    <title>Secure Delivery Platform — DevSecOps Bootcamp</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
 
 <header class="site-header">
-    <h1>Enoch Adekanye</h1>
-    <img src="{{ url_for('static', filename='images/Me.jpg') }}"
-         alt="Portrait of Enoch"
-         class="profile-pic">
+    <h1>Secure Delivery Platform</h1>
+    <p class="tagline">A production-style DevSecOps reference implementation on AWS —
+        built and maintained by Enoch Adekanye</p>
 </header>
 
 <main>
 
     <section class="content-section">
-        <h2>About Me</h2>
-        <p>I am a Cloud and DevOps engineer.</p>
+        <h2>This Deployment <span class="status-badge">Live</span></h2>
+        <p class="muted">Every release is traceable from commit to running container.
+            This metadata is injected by the CI/CD pipeline at build time.</p>
+        <table class="build-table">
+            <tr><th>Service</th><td>{{ build.service }}</td></tr>
+            <tr><th>Environment</th><td>{{ build.environment }}</td></tr>
+            <tr><th>Git commit</th><td><code>{{ build.git_sha }}</code></td></tr>
+            <tr><th>Image tag</th><td><code>{{ build.image_tag }}</code></td></tr>
+            <tr><th>Built at</th><td>{{ build.built_at }}</td></tr>
+        </table>
+        <p class="muted">API: <code>GET /health</code> · <code>GET /version</code></p>
     </section>
 
     <section class="content-section">
-        <h2>Skills</h2>
-        <ul class="skills-list">
-            <li>HTML</li>
-            <li>Python</li>
-            <li>AWS</li>
-            <li>Terraform</li>
-            <li>CloudFormation</li>
-            <li>AWS CDK</li>
-            <li>Linux</li>
-            <li>Docker</li>
-            <li>Kubernetes</li>
-            <li>Jenkins CI/CD</li>
-            <li>Git & GitHub</li>
-            <li>Network Engineering</li>
+        <h2>How This Service Ships</h2>
+        <ul class="pipeline-list">
+            <li><strong>CI gates:</strong> pytest · Bandit (SAST) · pip-audit (SCA) · Trivy (container scan)</li>
+            <li><strong>Infrastructure as Code:</strong> Terraform modules — network, IAM, ECR, ECS, logging</li>
+            <li><strong>Policy as Code:</strong> tfsec + Checkov + OPA/Conftest gates on every Terraform plan</li>
+            <li><strong>Governance:</strong> protected main, PR reviews, approval-gated releases</li>
+            <li><strong>Runtime:</strong> ECS Fargate · ALB with ACM TLS · CloudWatch observability</li>
         </ul>
     </section>
 
     <section class="content-section">
-        <h2>Contact</h2>
-
-        <form class="contact-form" method="post" action="/contact">
-            <input type="text" name="name" placeholder="Your name" required>
-            <input type="email" name="email" placeholder="Your email" required>
-            <textarea name="message" placeholder="Message" rows="5" required></textarea>
-            <button type="submit">Send</button>
-        </form>
-
+        <h2>Project</h2>
+        <p>This application exists to demonstrate a secure software delivery lifecycle
+            end-to-end. The full source, pipelines, and weekly build notes are public.</p>
+        <p><a class="btn" href="https://github.com/enoch-adekanye" rel="noopener">View the source &amp; pipeline on GitHub</a></p>
     </section>
 
 </main>
 
 <footer class="site-footer">
-    <p>© 2025 Enoch Adekanye</p>
+    <p>© 2026 Enoch Adekanye — DevSecOps Bootcamp</p>
 </footer>
 
 </body>

@@ -5,35 +5,36 @@
 
 /* Global page style */
 body {
-    font-family: Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     margin: 0;
-    background-color: #f4f4f4;
+    background-color: #f1f5f9;
+    color: #1e293b;
     line-height: 1.6;
 }
 
 /* Header */
 .site-header {
     text-align: center;
-    background-color: #222;
+    background-color: #0f172a;
     color: white;
     padding: 40px 20px;
 }
 
-/* Profile picture */
-.profile-pic {
-    width: 150px;
-    border-radius: 50%;
-    border: 3px solid white;
-    margin-top: 15px;
-    height: 150px;
-    object-fit: cover;
+.site-header h1 {
+    margin: 0 0 10px;
+}
 
+.tagline {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 16px;
 }
 
 /* Main content wrapper */
 main {
     max-width: 900px;
     margin: 30px auto;
+    padding: 0 15px;
 }
 
 /* Section styling */
@@ -42,58 +43,111 @@ main {
     padding: 30px;
     margin-bottom: 20px;
     border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
 /* Section headings */
 .content-section h2 {
     margin-top: 0;
-    color: #222;
-}
-
-/* Skills list */
-.skills-list {
-    columns: 2;
-    list-style-type: square;
-    padding-left: 20px;
-    font-size: 16px;
-}
-
-/* Contact form */
-.contact-form {
+    margin-bottom: 4px;
+    color: #0f172a;
     display: flex;
-    flex-direction: column;
-    gap: 15px;
+    align-items: center;
+    gap: 10px;
 }
 
-/* Form fields */
-.contact-form input,
-.contact-form textarea {
+/* Live status indicator */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #15803d;
+    background: #dcfce7;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.status-badge::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.25);
+}
+
+.muted {
+    color: #64748b;
+    font-size: 14px;
+}
+
+/* Build metadata table */
+.build-table {
     width: 100%;
-    padding: 10px;
-    font-size: 16px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    border-collapse: collapse;
+    margin: 15px 0;
 }
 
-/* Button */
-.contact-form button {
-    width: 120px;
-    padding: 10px;
-    background-color: #222;
+.build-table th,
+.build-table td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 15px;
+}
+
+.build-table tr:last-child th,
+.build-table tr:last-child td {
+    border-bottom: none;
+}
+
+.build-table th {
+    width: 160px;
+    color: #334155;
+    font-weight: 600;
+}
+
+code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    background: #f1f5f9;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* Pipeline list */
+.pipeline-list {
+    padding-left: 20px;
+}
+
+.pipeline-list li {
+    margin-bottom: 8px;
+}
+
+/* Link button */
+.btn {
+    display: inline-block;
+    padding: 10px 18px;
+    background-color: #0f172a;
     color: white;
-    border: none;
+    text-decoration: none;
     border-radius: 4px;
-    cursor: pointer;
+    transition: background-color 0.15s ease;
 }
 
-.contact-form button:hover {
-    background-color: #444;
+.btn:hover {
+    background-color: #334155;
 }
 
 /* Footer */
 .site-footer {
     text-align: center;
     padding: 15px;
-    background-color: #222;
+    background-color: #0f172a;
     color: white;
 }
