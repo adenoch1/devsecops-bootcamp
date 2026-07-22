@@ -88,6 +88,14 @@ module "ecs" {
   app_port            = var.app_port
   container_image_tag = var.container_image_tag
 
+  container_environment = [
+    { name = "SERVICE_NAME", value = var.project },
+    { name = "APP_ENV", value = var.environment },
+    { name = "GIT_SHA", value = var.git_sha },
+    { name = "IMAGE_TAG", value = var.container_image_tag },
+    { name = "BUILD_TIME", value = var.build_time },
+  ]
+
   desired_count = var.desired_count
   task_cpu      = var.task_cpu
   task_memory   = var.task_memory

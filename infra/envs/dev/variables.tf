@@ -35,6 +35,18 @@ variable "container_image_tag" {
   default     = "bootstrap"
 }
 
+variable "git_sha" {
+  type        = string
+  description = "Git commit SHA of the deployed build (injected by CI)"
+  default     = "dev"
+}
+
+variable "build_time" {
+  type        = string
+  description = "UTC build timestamp of the deployed image (injected by CI)"
+  default     = "unknown"
+}
+
 variable "task_cpu" {
   type        = number
   description = "Fargate task CPU"
