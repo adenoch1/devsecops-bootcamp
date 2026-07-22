@@ -81,7 +81,8 @@ jobs:
           terraform plan \
             -out=tfplan.bootstrap \
             -var="container_image_tag=bootstrap" \
-            -var="desired_count=0"
+            -var="desired_count=0" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Terraform apply (bootstrap)
         run: terraform apply -auto-approve tfplan.bootstrap
@@ -155,7 +156,8 @@ jobs:
           terraform plan \
             -out=tfplan.deploy \
             -var="container_image_tag=${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" \
-            -var="desired_count=1"
+            -var="desired_count=1" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Terraform apply (deploy)
         run: terraform apply -auto-approve tfplan.deploy

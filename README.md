@@ -116,7 +116,16 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-03-opa-https/README.md`
 
-> Upcoming: Week 04 — CloudWatch logs, dashboards, alarms, metric filters, SSM Parameter Store secrets.
+### ✅ Week 04 — Runtime Observability
+- Structured JSON application logging
+- CloudWatch log metric filter (application error rate)
+- CloudWatch alarms: ALB 5xx, unhealthy targets, ECS running-task count, app error rate
+- CloudWatch dashboard (ECS, ALB, WAF, application metrics)
+- SNS email alerting
+
+📄 Notes: `weeks/week-04-observability/README.md`
+
+> Upcoming: SSM Parameter Store secrets (once there's a real secret to manage), X-Ray tracing.
 
 ---
 
@@ -144,6 +153,7 @@ By the end of this bootcamp, you will understand how real teams:
   - `weeks/week-01-ci-cd/README.md`
   - `weeks/week-02-terraform-iac/README.md`
   - `weeks/week-03-opa-https/README.md`
+  - `weeks/week-04-observability/README.md`
 - If you need the exact code of that week, use Releases/Tags.
 
 ### For engineers cloning the project
