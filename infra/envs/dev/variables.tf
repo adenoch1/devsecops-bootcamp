@@ -124,3 +124,9 @@ variable "terraform_role_name" {
   type        = string
   description = "Terraform deploy role name"
 }
+
+variable "alert_email" {
+  type        = string
+  description = "Email address subscribed to CloudWatch alarm notifications. Left empty by default so this never has to be committed to terraform.tfvars (public repo) — real applies must pass a value via -var, TF_VAR_alert_email, or a CI secret."
+  default     = ""
+}

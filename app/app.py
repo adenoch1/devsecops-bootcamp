@@ -1,5 +1,9 @@
 from flask import Flask, jsonify, render_template
+from werkzeug.exceptions import HTTPException
+import json
+import logging
 import os
+import sys
 
 app = Flask(__name__)
 
@@ -13,6 +17,52 @@ BUILD_INFO = {
     "built_at": os.getenv("BUILD_TIME", "unknown"),
 }
 
+
+class JsonLogFormatter(logging.Formatter):
+    """Structured JSON logs so CloudWatch metric filters can match on `level`."""
+
+    def format(self, record):
+        payload = {
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "logger": record.name,
+            "service": BUILD_INFO["service"],
+            "environment": BUILD_INFO["environment"],
+            "git_sha": BUILD_INFO["git_sha"],
+        }
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        return json.dumps(payload)
+
+
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(JsonLogFormatter())
+app.logger.handlers = [_handler]
+app.logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(exc):
+    if isinstance(exc, HTTPException):
+        return exc
+    app.logger.error("Unhandled exception: %s", exc, exc_info=exc)
+    return jsonify(status="error"), 500
+
+One more conflict is likely coming right after this, further down in the same file — Phase 1's / route does render_template("index.html", build=BUILD_INFO) and adds a /version route; Phase 2's / route just does render_template("index.html") with no /version. If git shows you a conflict there (or even if it silently picked one side), the correct final routes section should be:
+
+@app.route("/health")
+def health():
+    return jsonify(status="ok"), 200
+
+
+@app.route("/version")
+def version():
+    return jsonify(BUILD_INFO), 200
+
+
+@app.route("/")
+def index():
+    return render_template("index.html", build=BUILD_INFO)
 
 @app.route("/health")
 def health():

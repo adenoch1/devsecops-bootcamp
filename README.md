@@ -7,6 +7,12 @@ This repository is designed for:
 - Engineers who want a real-world DevSecOps reference implementation
 - Interview preparation (architecture + pipeline + security + monitoring)
 
+> **Also available in AWS CDK (Python):** [devsecops-bootcamp-cdk](https://github.com/adenoch1/devsecops-bootcamp-cdk)
+> is a parallel implementation of this same app and architecture using CDK
+> instead of Terraform — same security posture, different IaC tool, so you
+> can compare the two directly. This repo (Terraform) stays the canonical,
+> more mature one with the full weekly build history.
+
 ---
 
 ## What You’ll Learn
@@ -110,7 +116,16 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-03-opa-https/README.md`
 
-> Upcoming: Week 04 — CloudWatch logs, dashboards, alarms, metric filters, SSM Parameter Store secrets.
+### ✅ Week 04 — Runtime Observability
+- Structured JSON application logging
+- CloudWatch log metric filter (application error rate)
+- CloudWatch alarms: ALB 5xx, unhealthy targets, ECS running-task count, app error rate
+- CloudWatch dashboard (ECS, ALB, WAF, application metrics)
+- SNS email alerting
+
+📄 Notes: `weeks/week-04-observability/README.md`
+
+> Upcoming: SSM Parameter Store secrets (once there's a real secret to manage), X-Ray tracing.
 
 ---
 
@@ -138,6 +153,7 @@ By the end of this bootcamp, you will understand how real teams:
   - `weeks/week-01-ci-cd/README.md`
   - `weeks/week-02-terraform-iac/README.md`
   - `weeks/week-03-opa-https/README.md`
+  - `weeks/week-04-observability/README.md`
 - If you need the exact code of that week, use Releases/Tags.
 
 ### For engineers cloning the project
