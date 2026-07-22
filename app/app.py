@@ -48,21 +48,6 @@ def handle_unexpected_error(exc):
     app.logger.error("Unhandled exception: %s", exc, exc_info=exc)
     return jsonify(status="error"), 500
 
-One more conflict is likely coming right after this, further down in the same file — Phase 1's / route does render_template("index.html", build=BUILD_INFO) and adds a /version route; Phase 2's / route just does render_template("index.html") with no /version. If git shows you a conflict there (or even if it silently picked one side), the correct final routes section should be:
-
-@app.route("/health")
-def health():
-    return jsonify(status="ok"), 200
-
-
-@app.route("/version")
-def version():
-    return jsonify(BUILD_INFO), 200
-
-
-@app.route("/")
-def index():
-    return render_template("index.html", build=BUILD_INFO)
 
 @app.route("/health")
 def health():
