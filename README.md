@@ -7,6 +7,12 @@ This repository is designed for:
 - Engineers who want a real-world DevSecOps reference implementation
 - Interview preparation (architecture + pipeline + security + monitoring)
 
+> **Also available in AWS CDK (Python):** [devsecops-bootcamp-cdk](https://github.com/adenoch1/devsecops-bootcamp-cdk)
+> is a parallel implementation of this same app and architecture using CDK
+> instead of Terraform — same security posture, different IaC tool, so you
+> can compare the two directly. This repo (Terraform) stays the canonical,
+> more mature one with the full weekly build history.
+
 ---
 
 ## What You’ll Learn
