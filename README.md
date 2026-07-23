@@ -128,7 +128,7 @@ By the end of this bootcamp, you will understand how real teams:
 ### 🚧 Week 05 — Progressive Delivery (in progress)
 - ✅ Stage 1: ECS deployment circuit breaker (automatic rollback on failed deploys)
 - ✅ Stage 2: VPC endpoints (S3 gateway + ECR/CloudWatch Logs interface endpoints)
-- ⬜ Stage 3: APM / distributed tracing via AWS X-Ray
+- ✅ Stage 3: APM / distributed tracing via AWS X-Ray
 - ⬜ Stage 4: CodeDeploy Blue/Green with alarm-gated automatic rollback
 
 📄 Notes: `weeks/week-05-progressive-delivery/README.md`

@@ -780,9 +780,42 @@ resource "aws_ecs_task_definition" "app" {
           { name = "TMPDIR", value = "/tmp" },
           { name = "GUNICORN_CMD_ARGS", value = "--worker-tmp-dir /tmp" },
           { name = "PYTHONUNBUFFERED", value = "1" },
-          { name = "PYTHONPYCACHEPREFIX", value = "/tmp/pycache" }
+          { name = "PYTHONPYCACHEPREFIX", value = "/tmp/pycache" },
+          { name = "AWS_XRAY_DAEMON_ADDRESS", value = "127.0.0.1:2000" }
         ]
       )
+
+      # Sidecar sends traces via localhost:2000 (awsvpc mode = shared network
+      # namespace within the task). essential=false: if the daemon dies, the
+      # app keeps serving traffic instead of the whole task cycling — tracing
+      # is an observability nice-to-have here, not a reason to take an outage.
+      dependsOn = [
+        { containerName = "xray-daemon", condition = "START" }
+      ]
+    },
+    {
+      name      = "xray-daemon"
+      image     = "public.ecr.aws/xray/aws-xray-daemon:latest"
+      essential = false
+
+      cpu               = 32
+      memoryReservation = 256
+
+      portMappings = [
+        {
+          containerPort = 2000
+          protocol      = "udp"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.app.name
+          awslogs-region        = data.aws_region.current.region
+          awslogs-stream-prefix = "xray-daemon"
+        }
+      }
     }
   ])
 
