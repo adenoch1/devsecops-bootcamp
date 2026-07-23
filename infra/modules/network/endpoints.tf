@@ -62,6 +62,10 @@ locals {
     ecr_api = "ecr.api"
     ecr_dkr = "ecr.dkr"
     logs    = "logs"
+    # Week 5 Stage 3: the X-Ray daemon sidecar calls the X-Ray API to ship
+    # trace segments — without this it'd go out via the NAT gateway instead,
+    # the one path this whole endpoints.tf file exists to avoid.
+    xray = "xray"
   }
 }
 
