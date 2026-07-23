@@ -801,6 +801,16 @@ resource "aws_ecs_service" "app" {
   deployment_maximum_percent         = 200
   health_check_grace_period_seconds  = 60
 
+  # If the new task definition fails to stabilize (crashes, fails health
+  # checks, etc.), ECS automatically rolls back to the previous task
+  # definition instead of leaving the service degraded. Matches the CDK
+  # sibling's DeploymentCircuitBreaker(rollback=True), added when this
+  # repo was ported to CDK.
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
   network_configuration {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.ecs_tasks.id]
