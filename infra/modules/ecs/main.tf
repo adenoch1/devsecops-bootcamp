@@ -124,6 +124,11 @@ resource "aws_lb" "this" {
   tags = merge(var.tags, { Name = "${var.name_prefix}-alb" })
 }
 
+# "Blue" target group (Week 5 Stage 4 terminology) — resource name kept as
+# `app` rather than renamed to `blue` to avoid an unnecessary replace of the
+# already-live target group. This is where the listener's default action
+# points on initial creation; CodeDeploy takes over routing between this
+# and `green` on every deployment after that.
 resource "aws_lb_target_group" "app" {
   name                 = "${var.name_prefix}-tg"
   port                 = local.app_port
@@ -143,6 +148,31 @@ resource "aws_lb_target_group" "app" {
   }
 
   tags = merge(var.tags, { Name = "${var.name_prefix}-tg" })
+}
+
+# "Green" target group (Week 5 Stage 4) — CodeDeploy registers each new
+# deployment's tasks here first, health-checks them, then shifts listener
+# traffic from blue to green per blue_green_deployment_config (see
+# infra/envs/dev/codedeploy.tf). Identical shape to the blue target group.
+resource "aws_lb_target_group" "green" {
+  name                 = "${var.name_prefix}-tg-green"
+  port                 = local.app_port
+  protocol             = "HTTP"
+  target_type          = "ip"
+  vpc_id               = var.vpc_id
+  deregistration_delay = 30
+
+  health_check {
+    enabled             = true
+    path                = var.health_check_path
+    matcher             = "200-399"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+
+  tags = merge(var.tags, { Name = "${var.name_prefix}-tg-green" })
 }
 
 resource "aws_lb_listener" "https" {
@@ -829,19 +859,22 @@ resource "aws_ecs_service" "app" {
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
 
-  # ✅ Production-grade rolling update even when desired_count=1
-  deployment_minimum_healthy_percent = 100
-  deployment_maximum_percent         = 200
-  health_check_grace_period_seconds  = 60
+  health_check_grace_period_seconds = 60
 
-  # If the new task definition fails to stabilize (crashes, fails health
-  # checks, etc.), ECS automatically rolls back to the previous task
-  # definition instead of leaving the service degraded. Matches the CDK
-  # sibling's DeploymentCircuitBreaker(rollback=True), added when this
-  # repo was ported to CDK.
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
+  # Week 5 Stage 4: CodeDeploy now owns traffic shifting and rollback
+  # decisions (infra/envs/dev/codedeploy.tf), which replaces two things
+  # that used to live directly on this resource:
+  #   - deployment_minimum_healthy_percent/deployment_maximum_percent only
+  #     apply to ECS's own rolling-update controller — meaningless once
+  #     deployment_controller is CODE_DEPLOY, so removed rather than left
+  #     as dead/misleading config.
+  #   - deployment_circuit_breaker (Stage 1) is mutually exclusive with the
+  #     CODE_DEPLOY controller — AWS rejects both being set together. Not a
+  #     regression: CodeDeploy's auto_rollback_configuration below covers
+  #     the same failed-deployment case, plus the alarm-triggered case
+  #     Stage 1 never could.
+  deployment_controller {
+    type = "CODE_DEPLOY"
   }
 
   network_configuration {
@@ -859,4 +892,24 @@ resource "aws_ecs_service" "app" {
   depends_on = [aws_lb_listener.https]
 
   tags = merge(var.tags, { Name = "${var.name_prefix}-svc" })
+
+  # Once CodeDeploy takes over, it registers new task sets and flips which
+  # target group is "live" directly via the CodeDeploy/ECS APIs — Terraform
+  # must stop trying to reconcile task_definition/load_balancer back to
+  # their last-known `terraform apply` values, or every plan after the
+  # first deployment would show a spurious diff fighting CodeDeploy for
+  # control. desired_count is ignored too, for a more specific reason: the
+  # release pipeline's Gate 1 (Infra Bootstrap) job applies with
+  # desired_count=0 on every push — a bootstrap-time safety default from
+  # before this project ever had a real image to run, harmless pre-Stage-4
+  # since the Deploy job set it back to 1 right after. With blue/green
+  # traffic shifting, that same "scale to 0, then back up" cycle would
+  # destroy the whole "blue" baseline the shift is supposed to happen
+  # against — a zero-downtime feature that starts from zero traffic isn't
+  # zero-downtime. Ignoring desired_count makes Gate 1's =0 a true no-op
+  # after initial creation, leaving CodeDeploy as sole owner of scale from
+  # then on.
+  lifecycle {
+    ignore_changes = [task_definition, load_balancer, desired_count]
+  }
 }

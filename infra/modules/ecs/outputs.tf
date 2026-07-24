@@ -17,12 +17,42 @@ output "alb_arn_suffix" {
 
 output "alb_target_group_arn" {
   value       = aws_lb_target_group.app.arn
-  description = "Target Group ARN for health checks"
+  description = "Blue target group ARN for health checks"
 }
 
 output "alb_target_group_arn_suffix" {
   value       = aws_lb_target_group.app.arn_suffix
-  description = "Target group ARN suffix, used as the TargetGroup dimension for CloudWatch metrics/alarms"
+  description = "Blue target group ARN suffix, used as the TargetGroup dimension for CloudWatch metrics/alarms"
+}
+
+output "alb_target_group_name" {
+  value       = aws_lb_target_group.app.name
+  description = "Blue target group name, used by CodeDeploy's target_group_pair_info"
+}
+
+output "alb_target_group_green_name" {
+  value       = aws_lb_target_group.green.name
+  description = "Green target group name, used by CodeDeploy's target_group_pair_info"
+}
+
+output "alb_https_listener_arn" {
+  value       = aws_lb_listener.https.arn
+  description = "HTTPS listener ARN, used by CodeDeploy's target_group_pair_info prod_traffic_route"
+}
+
+output "app_container_name" {
+  value       = "app"
+  description = "App container name within the task definition, used by CodeDeploy's AppSpec"
+}
+
+output "app_container_port" {
+  value       = local.app_port
+  description = "App container port, used by CodeDeploy's AppSpec"
+}
+
+output "task_definition_arn" {
+  value       = aws_ecs_task_definition.app.arn
+  description = "Current task definition ARN — read by the deploy workflow to build the CodeDeploy AppSpec for each new revision"
 }
 
 output "ecs_cluster_name" {

@@ -13,9 +13,9 @@ standalone feature:
 1. Rollback parity — done
 2. VPC endpoints — done
 3. APM / distributed tracing via X-Ray — done
-4. Progressive deployment via CodeDeploy Blue/Green (next — the biggest
+4. Progressive deployment via CodeDeploy Blue/Green — done (the biggest
    piece, folds the Week 4 alarms into automatic rollback during a live
-   traffic shift)
+   traffic shift, and supersedes Stage 1's circuit breaker)
 
 Week 5 Theme: Deploy safely, see the whole request, keep traffic off the
 public path where it doesn't need to be
@@ -23,13 +23,20 @@ public path where it doesn't need to be
 ```mermaid
 graph TB
     Client["Client / Browser"]
+    CodeDeploy["CodeDeploy<br/>(deployment group)"]
+    Alarms["CloudWatch Alarms<br/>(alb_5xx, app_error_rate)"]
 
     subgraph VPC["VPC 192.168.0.0/16"]
         IGW["Internet Gateway"]
 
         subgraph Public["Public Subnets (2 AZs)"]
-            ALB["Application Load Balancer<br/>+ WAFv2 (3 managed rule groups)"]
+            ALB["Application Load Balancer<br/>HTTPS listener"]
             NAT["NAT Gateway"]
+        end
+
+        subgraph TGs["Target Groups (Stage 4)"]
+            BlueTG["Blue TG<br/>(current live)"]
+            GreenTG["Green TG<br/>(new deployment)"]
         end
 
         subgraph Private["Private Subnets (2 AZs)"]
@@ -54,7 +61,13 @@ graph TB
 
     Client -->|"HTTPS 443"| IGW
     IGW --> ALB
-    ALB -->|"app port"| App
+    ALB -->|"linear traffic shift<br/>10% / 1 min"| BlueTG
+    ALB -.->|"shifts here during<br/>a deployment"| GreenTG
+    BlueTG --> App
+    GreenTG -.-> App
+
+    CodeDeploy -.->|"registers new task set,<br/>flips ALB routing"| GreenTG
+    Alarms -.->|"DEPLOYMENT_STOP_ON_ALARM<br/>= auto-rollback"| CodeDeploy
 
     App -.->|"UDP 2000<br/>(same task,<br/>shared network ns)"| XrayD
 
@@ -68,6 +81,8 @@ graph TB
     style Endpoints fill:#e0e7ff,stroke:#3730a3
     style NAT fill:#fef3c7,stroke:#b45309
     style XrayD fill:#dcfce7,stroke:#15803d
+    style TGs fill:#fce7f3,stroke:#a21caf
+    style CodeDeploy fill:#fce7f3,stroke:#a21caf
 ```
 
 Stage 1 — Rollback Parity (ECS Deployment Circuit Breaker)
@@ -165,11 +180,88 @@ map gains a fourth entry, `xray`. Same reasoning as Stage 2 — without it,
 the daemon's calls to the X-Ray API would go out via the NAT gateway, the
 exact path Stage 2 exists to avoid for everything else.
 
-What Was Achieved in Week 5 (Stages 1–3)
+Stage 4 — CodeDeploy Blue/Green
 
-✔ ECS deployment circuit breaker with automatic rollback
+What changed: `infra/modules/ecs/main.tf` gains a second ("green") target
+group, identical in shape to the existing ("blue") one. `aws_ecs_service.app`
+switches from ECS's own rolling-update controller to
+`deployment_controller { type = "CODE_DEPLOY" }`, and a new
+`infra/envs/dev/codedeploy.tf` defines the CodeDeploy application,
+deployment group, and IAM service role that actually own the traffic
+shift going forward.
+
+Why the target group is duplicated rather than reused: CodeDeploy's
+blue/green model needs two independent, health-checkable groups to shift
+between — it stands up the new deployment's tasks in the green group,
+health-checks them behind the same ALB, then moves listener traffic over
+once they're healthy. A single target group has nowhere to put the "new"
+tasks that isn't also the "old" tasks.
+
+Traffic shift: `CodeDeployDefault.ECSLinear10PercentEvery1Minutes` (a
+predefined AWS deployment config, referenced by name) — 10% of traffic
+every minute, full cutover in about 10 minutes. No test listener; the
+green target group only receives traffic once CodeDeploy reroutes the
+production listener, not before — a genuine pre-production test listener
+is a real CodeDeploy feature but adds a second listener/cert concern this
+project has no current use for.
+
+Rollback, made stronger than Stage 1: `auto_rollback_configuration` is
+enabled for both `DEPLOYMENT_FAILURE` and `DEPLOYMENT_STOP_ON_ALARM`, with
+`alarm_configuration` wired directly to the Week 4 alarms
+(`alb_5xx`, `app_error_rate` — `infra/envs/dev/observability.tf`). This is
+the concrete version of "stronger automated rollback built on Week 4": if
+either alarm fires *while traffic is still shifting*, CodeDeploy aborts
+and reverts automatically — a failure mode Stage 1's circuit breaker could
+never catch, since it only watched ECS-level task health, never
+application error rate or ALB 5xx responses.
+
+Why Stage 1's circuit breaker had to be removed, not layered on top: AWS
+rejects `deployment_circuit_breaker` and a `CODE_DEPLOY` deployment
+controller being set together — they're mutually exclusive rollout
+mechanisms. Not a capability regression: `auto_rollback_configuration`'s
+`DEPLOYMENT_FAILURE` event covers the exact case the circuit breaker
+handled (new tasks failing to stabilize), plus the new alarm-triggered
+case above.
+
+Full automation, no manual gate: `deployment_ready_option` is
+`CONTINUE_DEPLOYMENT` (traffic reroutes as soon as green is healthy, no
+human "continue-deployment" call required) and the old blue task set
+terminates automatically 5 minutes after a successful cutover
+(`terminate_blue_instances_on_deployment_success`) — a short buffer window
+without needing a human in the loop, appropriate for a personal project
+with no on-call rotation to gate on.
+
+A deploy-pipeline change this stage required: once
+`aws_ecs_service.app.task_definition`/`load_balancer` are
+`lifecycle`-ignored (CodeDeploy's job now, not Terraform's — see the
+comment in `infra/modules/ecs/main.tf`), a plain `terraform apply` in
+`.github/workflows/terraform-release.yml`'s `deploy` job still registers a
+new task definition revision, but no longer *ships* it. The `deploy` job
+now builds a CodeDeploy AppSpec referencing that new revision and calls
+`aws deploy create-deployment`, then waits on
+`aws deploy wait deployment-successful` instead of
+`aws ecs wait services-stable` — CodeDeploy owns the actual rollout from
+here.
+
+A second, related fix bundled into this stage: Gate 1 (Infra Bootstrap)
+has applied with `desired_count=0` on every push since Week 1 — a
+bootstrap-time default from before this project had a real image to run,
+harmless when the Deploy job unconditionally set it back to 1 right after.
+With blue/green traffic shifting, that same "scale to 0, then back up"
+cycle on every deploy would destroy the very "blue" baseline the shift is
+supposed to happen against before it even starts — a zero-downtime
+feature that begins from zero running tasks isn't zero-downtime.
+`desired_count` joins `task_definition`/`load_balancer` in the service's
+`ignore_changes`, making Gate 1's `=0` a true no-op after the environment
+first exists, and leaving CodeDeploy as sole owner of scale from then on.
+
+What Was Achieved in Week 5 (all 4 stages)
+
+✔ ECS deployment circuit breaker with automatic rollback (Stage 1),
+  superseded by CodeDeploy's stronger, alarm-aware rollback (Stage 4)
 ✔ Terraform/CDK parity restored (both sides now behave the same way on a
-  failed deployment)
+  failed deployment) — CDK's blue/green port is a deliberate follow-up,
+  once this stage is live-verified
 ✔ S3 gateway endpoint + 4 interface endpoints (ECR API, ECR Docker
   registry, CloudWatch Logs, X-Ray)
 ✔ Dedicated, VPC-scoped security group for the interface endpoints
@@ -177,11 +269,12 @@ What Was Achieved in Week 5 (Stages 1–3)
   isolated from app availability via `essential = false`
 ✔ Least-privilege X-Ray IAM policy on the task role (5 actions, no managed
   policy)
+✔ Real CodeDeploy blue/green traffic shifting, alarm-gated automatic
+  rollback wired to the Week 4 alarms, and a deploy pipeline that ships
+  through CodeDeploy instead of a direct ECS service update
 
-What's Next – Week 5 Stage 4
-
-CodeDeploy Blue/Green: a second target group, linear traffic shifting, and
-the Week 4 CloudWatch alarms (`alb_5xx`, `app_error_rate`) wired as
-automatic-rollback triggers *during* the shift — the point where "stronger
-rollback" and "progressive deployment" become the same feature instead of
-two separate ones.
+Week 5 is complete. The CDK port of Stage 4 (`devsecops-bootcamp-cdk`) is
+tracked as a follow-up PR — CloudFormation's handling of
+`CODE_DEPLOY`-controlled services differs from Terraform's in ways worth
+confirming against a real deployment first, same sequencing every other
+Week 5 stage used.
