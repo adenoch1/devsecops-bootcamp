@@ -439,6 +439,33 @@ resource "aws_s3_bucket_policy" "logs" {
         Condition = {
           Bool = { "aws:SecureTransport" = "false" }
         }
+      },
+
+      # Week 6: AWS Config delivery channel writes snapshots/history into
+      # this already-hardened bucket under config/ — standard, documented
+      # AWS Config S3 delivery pattern (ACL check, then scoped PutObject).
+      {
+        Sid       = "AWSConfigBucketPermissionsCheck"
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = aws_s3_bucket.logs.arn
+        Condition = {
+          StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
+        }
+      },
+      {
+        Sid       = "AWSConfigBucketDelivery"
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.logs.arn}/config/*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+          }
+        }
       }
     ]
   })
