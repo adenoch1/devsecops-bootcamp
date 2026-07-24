@@ -140,7 +140,17 @@ jobs:
           set -euo pipefail
 
           # IMPORTANT: Checkov expects a SINGLE value after --skip-check (comma-separated)
-          SKIP="CKV2_AWS_62,CKV2_AWS_76,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_144"
+          # CKV_AWS_378 (Week 5 Stage 4): flags module.ecs.aws_lb_target_group.green
+          # for its backend protocol=HTTP — same as the blue target group, which
+          # this check doesn't flag only because Terraform's aws_lb_listener
+          # resource references it directly. green is intentionally not
+          # referenced by any Terraform listener (CodeDeploy wires it dynamically
+          # at deploy time), so the graph-based check can't trace it to the HTTPS
+          # listener that actually fronts it. An inline #checkov:skip comment on
+          # the resource did not suppress this finding, so it's listed here
+          # instead — global in scope, but this project has no other target
+          # group this would incorrectly hide a real finding on.
+          SKIP="CKV2_AWS_62,CKV2_AWS_76,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_144,CKV_AWS_378"
 
           checkov -d . \
             --framework terraform \
