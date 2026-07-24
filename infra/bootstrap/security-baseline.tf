@@ -89,7 +89,12 @@ resource "aws_config_delivery_channel" "this" {
   s3_bucket_name = aws_s3_bucket.logs.id
   s3_key_prefix  = "config"
 
-  depends_on = [aws_s3_bucket_policy.logs]
+  # Neither of these is referenced in an argument above, so Terraform
+  # otherwise has no dependency edge to either and can create this
+  # concurrently with the recorder — AWS's Config API rejects a delivery
+  # channel with "Configuration recorder is not available" if the
+  # recorder isn't created first. Found via a real apply attempt.
+  depends_on = [aws_s3_bucket_policy.logs, aws_config_configuration_recorder.this]
 }
 
 resource "aws_config_configuration_recorder_status" "this" {
@@ -107,7 +112,7 @@ locals {
     s3-sse-enabled          = "S3_BUCKET_SERVER_SIDE_ENCRYPTION_ENABLED" # every S3 bucket in this project is KMS-encrypted
     s3-no-public-read       = "S3_BUCKET_PUBLIC_READ_PROHIBITED"         # every bucket already blocks public access
     s3-no-public-write      = "S3_BUCKET_PUBLIC_WRITE_PROHIBITED"        # same
-    cloudtrail-enabled      = "CLOUDTRAIL_ENABLED"                       # the pre-existing management-events trail
+    cloudtrail-enabled      = "CLOUD_TRAIL_ENABLED"                      # the pre-existing management-events trail
     vpc-flow-logs-enabled   = "VPC_FLOW_LOGS_ENABLED"                    # Week 1-2's network module already has these
     iam-no-admin-statements = "IAM_POLICY_NO_STATEMENTS_WITH_ADMIN_ACCESS"
     alb-waf-enabled         = "ALB_WAF_ENABLED" # Week 1-3's ALB has WAFv2 attached
