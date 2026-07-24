@@ -13,6 +13,10 @@ This repository is designed for:
 > can compare the two directly. This repo (Terraform) stays the canonical,
 > more mature one with the full weekly build history.
 
+> 📄 **[Read the Threat Model](THREAT-MODEL.md)** — STRIDE analysis of the
+> full architecture, every mitigation tied to real code, plus an honest
+> Residual Risks section naming what's *not* covered and why.
+
 ---
 
 ## What You’ll Learn
@@ -165,7 +169,7 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-09-secrets-management/README.md`
 
-### 🚧 Week 10 — Dynamic Application Security Testing (OWASP ZAP)
+### ✅ Week 10 — Dynamic Application Security Testing (OWASP ZAP)
 - First tool in this project that actually sends requests to the running app, not just static analysis
 - Scans a locally-run copy of the exact production image, not the live ALB — avoids tripping the real app's own alarms/GuardDuty
 - 6 real findings (missing security headers), all genuinely fixed in `app/app.py`, not suppressed
@@ -173,7 +177,14 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-10-dast-zap/README.md`
 
-> Upcoming: a written threat model.
+### ✅ Week 11 — Written Threat Model
+- STRIDE analysis of the full architecture (edge, runtime, CI/CD & supply chain, account-level baseline), trust-boundaries diagram
+- Every mitigation tied to real, already-built code from Weeks 1–10 — not a hypothetical checklist
+- An explicit, honest Residual Risks section — what isn't covered, and why that's an accepted trade-off rather than an oversight
+
+📄 **[THREAT-MODEL.md](THREAT-MODEL.md)** · Notes: `weeks/week-11-threat-model/README.md`
+
+This closes out the roadmap that started after Week 5.
 
 ---
 
