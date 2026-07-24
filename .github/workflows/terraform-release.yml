@@ -164,18 +164,78 @@ jobs:
       - name: Terraform apply (deploy)
         run: terraform apply -auto-approve tfplan.deploy
 
-      - name: Wait for ECS/ALB targets to become healthy (fail with evidence)
+      # Week 5 Stage 4: aws_ecs_service.app's task_definition/load_balancer
+      # are lifecycle-ignored now that deployment_controller is CODE_DEPLOY
+      # (infra/modules/ecs/main.tf), so the apply above registered a new
+      # task definition revision but did NOT ship it — the running service
+      # still points at whatever CodeDeploy last cut over to. This step is
+      # what actually ships the new revision: build an AppSpec, hand it to
+      # CodeDeploy, and let it blue/green-shift traffic per
+      # infra/envs/dev/codedeploy.tf's blue_green_deployment_config.
+      - name: Create CodeDeploy deployment (blue/green traffic shift)
+        id: codedeploy
         shell: bash
         run: |
           set -euo pipefail
 
+          TASK_DEF_ARN="$(terraform output -raw task_definition_arn)"
+          CONTAINER_NAME="$(terraform output -raw app_container_name)"
+          CONTAINER_PORT="$(terraform output -raw app_container_port)"
+          APP_NAME="$(terraform output -raw codedeploy_app_name)"
+          DG_NAME="$(terraform output -raw codedeploy_deployment_group_name)"
+
+          APPSPEC="$(jq -n \
+            --arg taskDefArn "$TASK_DEF_ARN" \
+            --arg containerName "$CONTAINER_NAME" \
+            --argjson containerPort "$CONTAINER_PORT" \
+            '{
+              version: 0.0,
+              Resources: [
+                {
+                  TargetService: {
+                    Type: "AWS::ECS::Service",
+                    Properties: {
+                      TaskDefinition: $taskDefArn,
+                      LoadBalancerInfo: {
+                        ContainerName: $containerName,
+                        ContainerPort: $containerPort
+                      }
+                    }
+                  }
+                }
+              ]
+            }')"
+
+          REVISION="$(jq -n --arg content "$APPSPEC" '{revisionType: "AppSpecContent", appSpecContent: {content: $content}}')"
+
+          DEPLOYMENT_ID="$(aws deploy create-deployment \
+            --application-name "${APP_NAME}" \
+            --deployment-group-name "${DG_NAME}" \
+            --revision "${REVISION}" \
+            --query "deploymentId" --output text)"
+
+          echo "Created deployment: ${DEPLOYMENT_ID}"
+          echo "deployment_id=${DEPLOYMENT_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for CodeDeploy deployment to succeed (fail with evidence)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEPLOYMENT_ID="${{ steps.codedeploy.outputs.deployment_id }}"
           CLUSTER="$(terraform output -raw ecs_cluster_name)"
           SERVICE="$(terraform output -raw ecs_service_name)"
-          TG_ARN="$(terraform output -raw alb_target_group_arn)"
+          BLUE_TG_ARN="$(terraform output -raw alb_target_group_arn)"
 
-          echo "Waiting for ECS service to become stable: ${CLUSTER}/${SERVICE}"
-          if ! aws ecs wait services-stable --cluster "${CLUSTER}" --services "${SERVICE}"; then
-            echo "::error::ECS service did not become stable. Dumping diagnostics..."
+          echo "Waiting for CodeDeploy deployment: ${DEPLOYMENT_ID}"
+          if ! aws deploy wait deployment-successful --deployment-id "${DEPLOYMENT_ID}"; then
+            echo "::error::CodeDeploy deployment did not succeed. Dumping diagnostics..."
+
+            echo "---- Deployment status ----"
+            aws deploy get-deployment --deployment-id "${DEPLOYMENT_ID}" \
+              --query "deploymentInfo.{status:status,errorInfo:errorInformation}" \
+              --output json || true
+
             echo "---- ECS events ----"
             aws ecs describe-services \
               --cluster "${CLUSTER}" \
@@ -198,32 +258,16 @@ jobs:
               done
             fi
 
-            echo "---- Target health ----"
+            echo "---- Blue target group health ----"
             aws elbv2 describe-target-health \
-              --target-group-arn "${TG_ARN}" \
+              --target-group-arn "${BLUE_TG_ARN}" \
               --query "TargetHealthDescriptions[].{id:Target.Id,state:TargetHealth.State,reason:TargetHealth.Reason,desc:TargetHealth.Description}" \
               --output table || true
 
             exit 1
           fi
 
-          echo "Checking target health for: ${TG_ARN}"
-          for i in {1..30}; do
-            STATES="$(aws elbv2 describe-target-health --target-group-arn "${TG_ARN}" --query "TargetHealthDescriptions[].TargetHealth.State" --output text || true)"
-            echo "Attempt ${i} — target states: ${STATES:-<none>}"
-            if echo "${STATES}" | grep -q "healthy"; then
-              echo "Target group has healthy targets ✅"
-              exit 0
-            fi
-            sleep 10
-          done
-
-          echo "::error::No healthy targets observed. Dumping target health details..."
-          aws elbv2 describe-target-health \
-            --target-group-arn "${TG_ARN}" \
-            --query "TargetHealthDescriptions[].{id:Target.Id,state:TargetHealth.State,reason:TargetHealth.Reason,desc:TargetHealth.Description}" \
-            --output table || true
-          exit 1
+          echo "CodeDeploy deployment succeeded ✅ (traffic fully shifted to the new task set)"
 
   #######################################################
   # DNS Smoke Test (non-blocking if FQDN isn't ready)
