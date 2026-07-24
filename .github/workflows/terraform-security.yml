@@ -150,7 +150,15 @@ jobs:
           # the resource did not suppress this finding, so it's listed here
           # instead — global in scope, but this project has no other target
           # group this would incorrectly hide a real finding on.
-          SKIP="CKV2_AWS_62,CKV2_AWS_76,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_144,CKV_AWS_378"
+          # CKV2_AWS_3 (Week 6): "Ensure GuardDuty is enabled to specific
+          # org/region" checks for an AWS Organizations-wide GuardDuty
+          # delegated-admin setup (aws_guardduty_organization_configuration).
+          # This is a single, standalone AWS account with no Organizations
+          # multi-account structure — that resource type doesn't apply here.
+          # GuardDuty itself is enabled (aws_guardduty_detector.this); this
+          # check is about a different, org-level concern this account
+          # doesn't have.
+          SKIP="CKV2_AWS_62,CKV2_AWS_76,CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_144,CKV_AWS_378,CKV2_AWS_3"
 
           checkov -d . \
             --framework terraform \

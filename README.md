@@ -133,6 +133,15 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-05-progressive-delivery/README.md`
 
+### 🚧 Week 06 — Account Security Baseline (GuardDuty + Security Hub + Config)
+- GuardDuty (account-wide threat detection, 15-minute finding frequency)
+- Security Hub (AWS Foundational Security Best Practices standard)
+- AWS Config (7 rules curated to this project's actual resource types)
+- All three routed to Week 4's existing SNS alert topic via filtered EventBridge rules
+- Lives in `infra/bootstrap/` (account-level singletons, applied manually — see the notes for why) and is **not** ported to the CDK sibling, by design
+
+📄 Notes: `weeks/week-06-security-baseline/README.md`
+
 > Upcoming: SSM Parameter Store secrets (once there's a real secret to manage).
 
 ---
