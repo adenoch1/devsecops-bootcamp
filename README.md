@@ -157,7 +157,7 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-08-sbom-cosign/README.md`
 
-### 🚧 Week 09 — Real Secrets Management (SSM Parameter Store)
+### ✅ Week 09 — Real Secrets Management (SSM Parameter Store)
 - Flask's session-signing key — the first genuinely non-contrived secret in this project
 - SSM Parameter Store (SecureString) + a dedicated KMS key, matching the existing per-purpose key convention
 - Injected via ECS's native `secrets` field, not plaintext `environment` — never appears in the task definition, plan output, or CloudWatch
@@ -165,7 +165,15 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-09-secrets-management/README.md`
 
-> Upcoming: ZAP (dynamic application security testing) and a written threat model.
+### 🚧 Week 10 — Dynamic Application Security Testing (OWASP ZAP)
+- First tool in this project that actually sends requests to the running app, not just static analysis
+- Scans a locally-run copy of the exact production image, not the live ALB — avoids tripping the real app's own alarms/GuardDuty
+- 6 real findings (missing security headers), all genuinely fixed in `app/app.py`, not suppressed
+- One informational non-issue allowlisted with a written reason (`.zap/rules.tsv`)
+
+📄 Notes: `weeks/week-10-dast-zap/README.md`
+
+> Upcoming: a written threat model.
 
 ---
 
