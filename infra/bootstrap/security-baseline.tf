@@ -75,6 +75,12 @@ resource "aws_config_configuration_recorder" "this" {
 
   recording_group {
     all_supported = true
+    # all_supported alone only covers regional resource types. Global
+    # resources (IAM roles/policies — this project has many) need this
+    # explicitly set too. Only one Config recorder per account should set
+    # this to true, to avoid duplicate global-resource recording across
+    # regions; since this account has exactly one recorder, that's moot.
+    include_global_resource_types = true
   }
 }
 
