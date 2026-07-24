@@ -199,9 +199,24 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = var.acm_certificate_arn
 
+  # Initial value only. Once CodeDeploy runs a blue/green deployment, it
+  # rewrites this listener's default_action directly (a weighted forward
+  # across blue/green) via the ELB API, completely outside Terraform's
+  # knowledge — same reason aws_ecs_service.app ignores task_definition/
+  # load_balancer below. Missing this the first time around caused a real
+  # outage: a later `terraform apply` reset the listener back to Terraform's
+  # stale single-target-group config (100% blue, which had zero running
+  # tasks after a successful cutover to green), taking the site down before
+  # the next CodeDeploy deployment even started — and that deployment then
+  # failed too, because CodeDeploy's own record of "what's behind this
+  # listener" no longer matched reality. Found via a live production 503.
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.app.arn
+  }
+
+  lifecycle {
+    ignore_changes = [default_action]
   }
 
   tags = merge(var.tags, { Name = "${var.name_prefix}-https-listener" })
