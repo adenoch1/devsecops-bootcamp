@@ -142,14 +142,22 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-06-security-baseline/README.md`
 
-### 🚧 Week 07 — Secret Scanning (Gitleaks)
+### ✅ Week 07 — Secret Scanning (Gitleaks)
 - Full git history scanned on every PR, not just the diff
 - Verified against real repo history locally before enabling in CI
 - Free for public repos, no license/setup cost
 
 📄 Notes: `weeks/week-07-secret-scanning/README.md`
 
-> Upcoming: SBOM generation + cosign image signing (supply-chain security).
+### 🚧 Week 08 — Supply-Chain Security (SBOM + Cosign)
+- SBOM (SPDX-JSON, via Syft) generated for every image and attached as an in-toto attestation in ECR
+- Every image signed keyless (Sigstore Fulcio + Rekor) using the workflow's own GitHub Actions OIDC identity — no signing key to manage
+- Self-verification step in the same job — a broken signature fails the build
+- Signed/attested once by digest, covers every tag pushed from the same build
+
+📄 Notes: `weeks/week-08-sbom-cosign/README.md`
+
+> Upcoming: ZAP (dynamic application security testing).
 
 ---
 

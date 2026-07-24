@@ -180,6 +180,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push image to ECR
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.build_context }}
@@ -188,3 +189,44 @@ jobs:
           pull: true
           no-cache: true
           tags: ${{ steps.tags.outputs.tags }}
+
+      # Week 8: SBOM + cosign. Signed/attested once, by digest -- every tag
+      # pushed above (deploy tag, optionally bootstrap/latest) points at
+      # the same manifest digest from one build, so one signature and one
+      # SBOM attestation covers all of them; no need to repeat per tag.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Generate SBOM (Syft, SPDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          image: "${{ env.IMAGE_URI }}@${{ steps.build.outputs.digest }}"
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+          upload-release-assets: false
+
+      - name: Attach SBOM as an in-toto attestation
+        run: |
+          set -euo pipefail
+          cosign attest --yes \
+            --type spdxjson \
+            --predicate sbom.spdx.json \
+            "${IMAGE_URI}@${{ steps.build.outputs.digest }}"
+
+      # Keyless signing (Sigstore Fulcio + Rekor transparency log) via this
+      # job's own GitHub Actions OIDC identity -- no private key to
+      # generate, store as a secret, or rotate. Requires id-token: write
+      # (already granted at the workflow level above).
+      - name: Sign the image (keyless, Sigstore)
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${IMAGE_URI}@${{ steps.build.outputs.digest }}"
+
+      - name: Verify the signature (sanity check, fails the build if signing didn't actually take)
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/adenoch1/devsecops-bootcamp/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${IMAGE_URI}@${{ steps.build.outputs.digest }}"
