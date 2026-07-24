@@ -133,7 +133,7 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-05-progressive-delivery/README.md`
 
-### 🚧 Week 06 — Account Security Baseline (GuardDuty + Security Hub + Config)
+### ✅ Week 06 — Account Security Baseline (GuardDuty + Security Hub + Config)
 - GuardDuty (account-wide threat detection, 15-minute finding frequency)
 - Security Hub (AWS Foundational Security Best Practices standard)
 - AWS Config (7 rules curated to this project's actual resource types)
@@ -142,7 +142,14 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-06-security-baseline/README.md`
 
-> Upcoming: SSM Parameter Store secrets (once there's a real secret to manage).
+### 🚧 Week 07 — Secret Scanning (Gitleaks)
+- Full git history scanned on every PR, not just the diff
+- Verified against real repo history locally before enabling in CI
+- Free for public repos, no license/setup cost
+
+📄 Notes: `weeks/week-07-secret-scanning/README.md`
+
+> Upcoming: SBOM generation + cosign image signing (supply-chain security).
 
 ---
 
