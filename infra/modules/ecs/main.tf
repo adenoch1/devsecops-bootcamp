@@ -847,6 +847,14 @@ resource "aws_ecs_task_definition" "app" {
         ]
       )
 
+      # Week 9: SSM Parameter Store secrets, injected via ECS's native
+      # `secrets` field rather than plaintext `environment` — the execution
+      # role fetches and decrypts each valueFrom before the container
+      # starts, so the value never appears in the task definition JSON,
+      # `terraform plan` output, or CloudWatch. Empty by default; see
+      # infra/envs/dev/secrets.tf for what's actually passed in.
+      secrets = var.container_secrets
+
       # Sidecar sends traces via localhost:2000 (awsvpc mode = shared network
       # namespace within the task). essential=false: if the daemon dies, the
       # app keeps serving traffic instead of the whole task cycling — tracing

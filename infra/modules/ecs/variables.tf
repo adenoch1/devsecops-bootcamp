@@ -86,6 +86,15 @@ variable "container_environment" {
   default = []
 }
 
+variable "container_secrets" {
+  description = "Secrets for the ECS container, injected via ECS's native `secrets` field (SSM Parameter Store / Secrets Manager ARNs) rather than plaintext `environment` — the execution role fetches and decrypts these before the container starts, so the value never appears in the task definition or Terraform plan output."
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
+  default = []
+}
+
 variable "task_cpu" {
   description = "Fargate task CPU"
   type        = number

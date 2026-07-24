@@ -96,6 +96,10 @@ module "ecs" {
     { name = "BUILD_TIME", value = var.build_time },
   ]
 
+  container_secrets = [
+    { name = "FLASK_SECRET_KEY", valueFrom = aws_ssm_parameter.flask_secret_key.arn },
+  ]
+
   desired_count = var.desired_count
   task_cpu      = var.task_cpu
   task_memory   = var.task_memory
