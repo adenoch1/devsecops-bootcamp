@@ -52,7 +52,7 @@ By the end of this bootcamp, you will understand how real teams:
 - **Alerts** — critical error alerts configured
 
 ### 4) Production Standards
-- **Branching Strategy** — feature → dev → staging → main (evolves by week)
+- **Branching Strategy** — feature branch → PR → `main` (protected, review + checks required). Single `dev` environment by design — a second, genuinely-tested `staging` environment would double AWS cost for a project with one contributor and no team to gate a promotion step between environments; not built, and this line used to imply otherwise.
 - **Pull Requests** — approval + automated checks required
 - **Versioning** — weekly releases tagged clearly
 - **High Availability** — Multi-AZ when applicable
@@ -149,7 +149,7 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-07-secret-scanning/README.md`
 
-### 🚧 Week 08 — Supply-Chain Security (SBOM + Cosign)
+### ✅ Week 08 — Supply-Chain Security (SBOM + Cosign)
 - SBOM (SPDX-JSON, via Syft) generated for every image and attached as an in-toto attestation in ECR
 - Every image signed keyless (Sigstore Fulcio + Rekor) using the workflow's own GitHub Actions OIDC identity — no signing key to manage
 - Self-verification step in the same job — a broken signature fails the build
@@ -157,7 +157,15 @@ By the end of this bootcamp, you will understand how real teams:
 
 📄 Notes: `weeks/week-08-sbom-cosign/README.md`
 
-> Upcoming: ZAP (dynamic application security testing).
+### 🚧 Week 09 — Real Secrets Management (SSM Parameter Store)
+- Flask's session-signing key — the first genuinely non-contrived secret in this project
+- SSM Parameter Store (SecureString) + a dedicated KMS key, matching the existing per-purpose key convention
+- Injected via ECS's native `secrets` field, not plaintext `environment` — never appears in the task definition, plan output, or CloudWatch
+- Least-privilege: the execution role can read exactly this one parameter and decrypt exactly this one key
+
+📄 Notes: `weeks/week-09-secrets-management/README.md`
+
+> Upcoming: ZAP (dynamic application security testing) and a written threat model.
 
 ---
 
