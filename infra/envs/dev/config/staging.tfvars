@@ -1,0 +1,10 @@
+environment              = "staging"
+vpc_cidr                 = "10.20.0.0/16"
+desired_count            = 2
+nat_gateway_per_az       = true
+autoscaling_min_capacity = 2
+autoscaling_max_capacity = 6
+waf_rate_limit           = 1500
+replication_enabled      = true
+log_retention_days       = 90
+flow_log_retention_days  = 90

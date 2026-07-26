@@ -134,7 +134,7 @@ Five boundaries worth naming explicitly:
 
 | Threat | Mitigation | Residual risk |
 |---|---|---|
-| **S/T/I/D/E** (general threat detection) | GuardDuty (15-min finding frequency), Security Hub (FSBP standard), Config (7 rules) all routed to a real, subscribed SNS topic | **Single account, single region.** No AWS Organizations delegated admin, no cross-region aggregation. A finding in a region other than `ca-central-1` (there are none today, since this account only operates there) would not be seen. Explicitly a single-account-scale posture, not an enterprise one |
+| **S/T/I/D/E** (general threat detection) | GuardDuty (15-min finding frequency), Security Hub (FSBP with all-region finding aggregation and optional member accounts), Config (7 rules) all routed to SNS | Member enrollment and delegated-administrator designation still require AWS Organizations governance outside this repository |
 | **R** — Alert fatigue / missed findings | EventBridge filtering (Medium+ for GuardDuty, HIGH/CRITICAL for Security Hub, NON_COMPLIANT-only for Config) keeps the signal-to-noise ratio usable | Filtering could also mean a real Low/Medium finding goes unnoticed for longer — a deliberate trade-off, not an oversight |
 
 ## Residual Risks & Accepted Trade-offs (explicit, by design)
@@ -142,39 +142,22 @@ Five boundaries worth naming explicitly:
 These are not oversights — each was considered and accepted for this
 project's scale, with the reasoning stated:
 
-1. **No WAF rate-based rule.** Cost/complexity not justified at current
-   traffic; would be a straightforward addition (`RateBasedStatement`) if
-   this ever served real production traffic.
-2. **Single NAT gateway — an availability single point of failure**, not
-   a security one. Documented since Week 2 as a cost trade-off ("later we
-   can do 2 for HA").
-3. **No automated secret rotation.** Documented explicitly in the Week 9
-   CDK port (`AwsSolutions-SMG4` suppression): no AWS-provided rotation
-   Lambda template exists for a generic app signing key, and ECS `secrets`
-   are read once at container startup, not live — meaningful rotation
-   would need a coordinated service redeploy as part of the rotation
-   Lambda, disproportionate for a key no route currently uses for
-   anything session-dependent.
-4. **ZAP baseline is passive-only.** No active scan (real attack payloads)
-   has been run against this application. A full active scan is a
-   separate, higher-risk exercise most teams reserve for a dedicated
-   testing window against a non-production target — deliberately out of
-   scope for a routine CI gate.
-5. **No deploy-time signature enforcement.** Cosign signatures exist and
-   are verified in CI, but nothing currently blocks an unsigned image
-   from being deployed if pushed outside the normal pipeline. A real
-   admission-control gate (e.g., verifying signatures at ECS deploy time)
-   would close this.
-6. **CDK repo currently has no live infrastructure deployed.** Its
+1. **Development is deliberately cost optimized.** It uses one NAT and may
+   run one task; staging and production use per-AZ NAT and a two-task floor.
+2. **Active DAST depends on a representative staging identity.** Coverage is
+   only as good as the test user's reachable application paths.
+3. **Pipeline admission is the ECS enforcement point.** The workflow fails
+   closed on Cosign verification; direct deployment API access must remain
+   restricted to prevent bypass.
+4. **CDK repo currently has no live infrastructure deployed.** Its
    mitigations are verified *as designed* (synth-clean, cdk-nag clean)
    but not *as running* the way the Terraform side's are (which has been
    through a real production incident and recovery this session). Worth
    being precise about that distinction rather than claiming equal
    verification depth for both.
-7. **Single-account, single-region account security baseline.** No
-   Organizations-wide aggregation. Appropriate for this project's actual
-   scale; would not be sufficient for a multi-account enterprise posture.
-8. **No independent second reviewer.** Branch protection requires review,
+5. **Multi-account governance needs an organization owner.** Terraform can
+   enroll supplied members but cannot create independent account ownership.
+6. **No independent second reviewer.** Branch protection requires review,
    but the reviewing account (`adenoch`) and the project owner are the
    same person in practice — a real organizational control this can't
    fully replicate at personal-project scale.

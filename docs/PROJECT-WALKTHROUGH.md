@@ -182,17 +182,15 @@ section of `THREAT-MODEL.md` — maturity is knowing them, not hiding them):
 - No WAF rate-based rule — cost/complexity not justified at current traffic.
 - Single NAT gateway — an availability trade-off, not a security one, documented since
   Week 2.
-- No automated secret rotation — no AWS-provided rotation Lambda template exists for a
-  generic app signing key, and ECS `secrets` are read once at startup, not live, so
-  meaningful rotation would need a coordinated redeploy too.
-- ZAP baseline is passive-only — no active-scan/pentest has been run.
-- Signatures are verified in CI but **not enforced at deploy time** — nothing currently
-  blocks an unsigned image pushed outside the normal pipeline from being deployed.
+- Secret rotation is scheduled quarterly and followed by a controlled deployment so new
+  ECS tasks fetch the new SecureString value.
+- PRs retain passive ZAP; staging receives scheduled authenticated active DAST.
+- Cosign signature verification is a fail-closed gate immediately before task registration.
 - The CDK repo currently has no live infrastructure deployed — its controls are verified
   *as designed* (synth-clean, cdk-nag clean), not *as running* the way the Terraform side's
   have been.
-- The account security baseline is single-account, single-region — no Organizations-wide
-  aggregation.
+- Security Hub aggregates all regions and accepts configured member accounts; delegated
+  administration still requires an AWS Organizations owner.
 
 ## 7. Observability
 
@@ -248,14 +246,11 @@ delivery" that makes both claims concrete instead of buzzwords.
 
 ## 9. Trade-offs & what I'd change for production
 
-Single NAT gateway (cost vs. AZ resilience — documented, not accidental) · single `dev`
-environment by design, not a missing staging environment — a second, genuinely-tested
-environment would double AWS cost for a project with one contributor and no team to gate a
-promotion step between environments · GoDaddy DNS instead of Route 53 (pre-existing domain;
-would migrate for alias records + native health checks) · fixed `desired_count`, no
-autoscaling policy yet — traffic at this scale doesn't justify it, but I'd add target-tracking
-on CPU/request count first · no WAF rate-based rule yet · no
-deploy-time signature enforcement (checked in CI, not blocked at admission) · a lightweight,
+Development keeps one NAT as an explicit cost trade-off; staging and production use a NAT
+per AZ · isolated development/staging/production states and GitHub approval environments ·
+Terraform-managed Route 53 aliases with target-health evaluation · ECS CPU and memory
+target-tracking autoscaling · WAF per-IP rate limiting · fail-closed Cosign deployment
+verification · a lightweight,
 intentionally small **Jenkins pipeline** (`jenkins/Jenkinsfile.lite`) kept alongside as a
 learning/comparison reference — it's illustrative, template-based, never actually run
 against this project's real infrastructure, and I'm precise about that distinction rather

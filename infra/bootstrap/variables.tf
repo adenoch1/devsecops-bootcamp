@@ -34,3 +34,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "securityhub_members" {
+  description = "Security Hub member accounts keyed by AWS account ID, with the root email used for invitation. Keep empty in a standalone account."
+  type        = map(string)
+  default     = {}
+}

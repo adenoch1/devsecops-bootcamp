@@ -1,0 +1,14 @@
+environment               = "production"
+vpc_cidr                  = "10.30.0.0/16"
+desired_count             = 2
+nat_gateway_per_az        = true
+autoscaling_min_capacity  = 2
+autoscaling_max_capacity  = 10
+autoscaling_cpu_target    = 60
+autoscaling_memory_target = 70
+waf_rate_limit            = 2000
+replication_enabled       = true
+log_retention_days        = 365
+flow_log_retention_days   = 365
+lifecycle_expire_days     = 365
+lifecycle_glacier_days    = 90

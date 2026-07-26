@@ -1,0 +1,27 @@
+name: Performance baseline
+
+on:
+  schedule:
+    - cron: "41 4 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - name: Run capacity baseline
+        env:
+          BASE_URL: ${{ secrets.STAGING_URL }}
+        run: k6 run --summary-export=k6-summary.json scripts/k6-load-test.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-capacity-baseline-${{ github.run_id }}
+          path: k6-summary.json
+          retention-days: 90

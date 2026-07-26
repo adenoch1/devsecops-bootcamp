@@ -36,6 +36,23 @@ resource "aws_securityhub_account" "this" {
   enable_default_standards = false
 }
 
+# Centralizes findings from all current and future regions in this account.
+# Member accounts can be enrolled below; in AWS Organizations, use this
+# account as the delegated Security Hub administrator.
+resource "aws_securityhub_finding_aggregator" "this" {
+  linking_mode = "ALL_REGIONS"
+  depends_on   = [aws_securityhub_account.this]
+}
+
+resource "aws_securityhub_member" "this" {
+  for_each   = var.securityhub_members
+  account_id = each.key
+  email      = each.value
+  invite     = true
+
+  depends_on = [aws_securityhub_account.this]
+}
+
 resource "aws_securityhub_standards_subscription" "fsbp" {
   standards_arn = "arn:aws:securityhub:${var.aws_region}::standards/aws-foundational-security-best-practices/v/1.0.0"
   depends_on    = [aws_securityhub_account.this]

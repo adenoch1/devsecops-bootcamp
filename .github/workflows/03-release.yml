@@ -22,6 +22,11 @@ on:
         description: "Tag to use for the pushed image"
         required: true
         type: string
+      environment:
+        description: "Target environment used in the ECR repository name"
+        required: false
+        type: string
+        default: "development"
     outputs:
       deploy_tag:
         description: "The tag pushed to ECR"
@@ -37,6 +42,12 @@ on:
         required: true
         type: string
         default: "manual"
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        default: "development"
+        options: [development, staging, production]
 
 permissions:
   contents: read
@@ -86,7 +97,7 @@ jobs:
           fi
 
           PROJECT=$(grep -E '^\s*project\s*=' "$TFVARS" | head -n1 | awk -F\" '{print $2}')
-          ENVIRONMENT=$(grep -E '^\s*environment\s*=' "$TFVARS" | head -n1 | awk -F\" '{print $2}')
+          ENVIRONMENT="${{ inputs.environment || 'development' }}"
 
           if [ -z "$PROJECT" ] || [ -z "$ENVIRONMENT" ]; then
             echo "ERROR: Could not read project/environment from $TFVARS"

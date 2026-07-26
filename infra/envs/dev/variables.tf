@@ -130,3 +130,46 @@ variable "alert_email" {
   description = "Email address subscribed to CloudWatch alarm notifications. Left empty by default so this never has to be committed to terraform.tfvars (public repo) — real applies must pass a value via -var, TF_VAR_alert_email, or a CI secret."
   default     = ""
 }
+
+variable "nat_gateway_per_az" {
+  type        = bool
+  description = "Whether each AZ receives its own NAT gateway."
+  default     = true
+}
+
+variable "autoscaling_min_capacity" {
+  type    = number
+  default = 2
+}
+
+variable "autoscaling_max_capacity" {
+  type    = number
+  default = 10
+}
+
+variable "autoscaling_cpu_target" {
+  type    = number
+  default = 60
+}
+
+variable "autoscaling_memory_target" {
+  type    = number
+  default = 70
+}
+
+variable "waf_rate_limit" {
+  type    = number
+  default = 2000
+}
+
+variable "route53_zone_id" {
+  type        = string
+  description = "Route 53 hosted zone ID. Empty disables the managed alias."
+  default     = ""
+}
+
+variable "fqdn" {
+  type        = string
+  description = "Application DNS name managed by Terraform when route53_zone_id is set."
+  default     = ""
+}

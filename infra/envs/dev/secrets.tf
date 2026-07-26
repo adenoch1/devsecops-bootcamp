@@ -66,6 +66,12 @@ resource "aws_ssm_parameter" "flask_secret_key" {
   value  = random_password.flask_secret_key.result
 
   tags = local.tags
+
+  # The scheduled rotation workflow owns subsequent values. Terraform creates
+  # the initial value and manages metadata without reverting a rotated secret.
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 # The ECS *task execution* role fetches/decrypts secrets before the

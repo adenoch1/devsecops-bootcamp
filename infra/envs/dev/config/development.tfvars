@@ -1,0 +1,10 @@
+environment              = "development"
+vpc_cidr                 = "10.10.0.0/16"
+desired_count            = 1
+nat_gateway_per_az       = false
+autoscaling_min_capacity = 1
+autoscaling_max_capacity = 3
+waf_rate_limit           = 1000
+replication_enabled      = false
+log_retention_days       = 30
+flow_log_retention_days  = 30
