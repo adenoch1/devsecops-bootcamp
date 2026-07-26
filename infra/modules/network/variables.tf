@@ -23,3 +23,9 @@ variable "cloudwatch_logs_kms_key_arn" {
   type        = string
   description = "KMS Key ARN to encrypt CloudWatch log groups (ECS + VPC Flow Logs)"
 }
+
+variable "nat_gateway_per_az" {
+  type        = bool
+  description = "Create one NAT gateway and private route table per AZ. Enable for staging/production to remove the single-AZ egress dependency."
+  default     = true
+}

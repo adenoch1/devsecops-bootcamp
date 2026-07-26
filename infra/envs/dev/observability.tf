@@ -99,6 +99,73 @@ resource "aws_cloudwatch_metric_alarm" "target_unhealthy" {
   ok_actions         = [aws_sns_topic.alerts.arn]
 }
 
+# Error-budget burn signal: target 5xx responses exceed 1% of requests for
+# three consecutive five-minute windows.
+resource "aws_cloudwatch_metric_alarm" "availability_slo_burn" {
+  alarm_name          = "${local.name_prefix}-availability-slo-burn"
+  alarm_description   = "Target 5xx ratio exceeded the 99.9% availability SLO burn threshold."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+
+  metric_query {
+    id          = "error_rate"
+    expression  = "IF(requests>0,100*errors/requests,0)"
+    label       = "Target 5xx percentage"
+    return_data = true
+  }
+
+  metric_query {
+    id = "errors"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "HTTPCode_Target_5XX_Count"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = module.ecs.alb_arn_suffix
+      }
+    }
+  }
+
+  metric_query {
+    id = "requests"
+    metric {
+      namespace   = "AWS/ApplicationELB"
+      metric_name = "RequestCount"
+      period      = 300
+      stat        = "Sum"
+      dimensions = {
+        LoadBalancer = module.ecs.alb_arn_suffix
+      }
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "latency_slo" {
+  alarm_name          = "${local.name_prefix}-latency-p95-slo"
+  alarm_description   = "ALB p95 target response time exceeded 500 ms."
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  threshold           = 0.5
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "TargetResponseTime"
+  extended_statistic  = "p95"
+  period              = 300
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    LoadBalancer = module.ecs.alb_arn_suffix
+  }
+}
+
 resource "aws_cloudwatch_metric_alarm" "ecs_running_below_desired" {
   alarm_name          = "${local.name_prefix}-ecs-running-below-desired"
   comparison_operator = "LessThanThreshold"

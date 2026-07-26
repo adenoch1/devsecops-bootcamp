@@ -53,6 +53,7 @@ module "network" {
 
   flow_log_retention_days     = var.flow_log_retention_days
   cloudwatch_logs_kms_key_arn = module.logging.cloudwatch_logs_kms_key_arn
+  nat_gateway_per_az          = var.nat_gateway_per_az
 }
 
 module "ecr" {
@@ -100,9 +101,14 @@ module "ecs" {
     { name = "FLASK_SECRET_KEY", valueFrom = aws_ssm_parameter.flask_secret_key.arn },
   ]
 
-  desired_count = var.desired_count
-  task_cpu      = var.task_cpu
-  task_memory   = var.task_memory
+  desired_count             = var.desired_count
+  task_cpu                  = var.task_cpu
+  task_memory               = var.task_memory
+  autoscaling_min_capacity  = var.autoscaling_min_capacity
+  autoscaling_max_capacity  = var.autoscaling_max_capacity
+  autoscaling_cpu_target    = var.autoscaling_cpu_target
+  autoscaling_memory_target = var.autoscaling_memory_target
+  waf_rate_limit            = var.waf_rate_limit
 
   acm_certificate_arn         = var.acm_certificate_arn
   alb_log_bucket_name         = module.logging.alb_log_bucket_name
@@ -110,4 +116,17 @@ module "ecs" {
   cloudwatch_logs_kms_key_arn = module.logging.cloudwatch_logs_kms_key_arn
   log_retention_days          = var.log_retention_days
   health_check_path           = var.health_check_path
+}
+
+resource "aws_route53_record" "app" {
+  count   = var.route53_zone_id != "" && var.fqdn != "" ? 1 : 0
+  zone_id = var.route53_zone_id
+  name    = var.fqdn
+  type    = "A"
+
+  alias {
+    name                   = module.ecs.alb_dns_name
+    zone_id                = module.ecs.alb_zone_id
+    evaluate_target_health = true
+  }
 }

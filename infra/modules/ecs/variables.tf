@@ -142,3 +142,33 @@ variable "terraform_role_name" {
   type        = string
   description = "Name of the IAM role used by Terraform (e.g., GitHub Actions OIDC deploy role)"
 }
+
+variable "autoscaling_min_capacity" {
+  type        = number
+  description = "Minimum ECS task count."
+  default     = 2
+}
+
+variable "autoscaling_max_capacity" {
+  type        = number
+  description = "Maximum ECS task count."
+  default     = 10
+}
+
+variable "autoscaling_cpu_target" {
+  type        = number
+  description = "Target average ECS CPU utilization percentage."
+  default     = 60
+}
+
+variable "autoscaling_memory_target" {
+  type        = number
+  description = "Target average ECS memory utilization percentage."
+  default     = 70
+}
+
+variable "waf_rate_limit" {
+  type        = number
+  description = "Maximum requests per five-minute WAF evaluation window per source IP."
+  default     = 2000
+}

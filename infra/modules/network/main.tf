@@ -74,20 +74,23 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# NAT (single NAT to reduce cost; later we can do 2 for HA)
+# One NAT per AZ in resilient environments. Development may explicitly opt
+# into a single NAT to control cost.
 resource "aws_eip" "nat" {
+  count  = var.nat_gateway_per_az ? length(local.azs) : 1
   domain = "vpc"
   tags = merge(var.tags, {
-    Name = "${var.name_prefix}-nat-eip"
+    Name = "${var.name_prefix}-nat-eip-${count.index + 1}"
   })
 }
 
 resource "aws_nat_gateway" "this" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
+  count         = var.nat_gateway_per_az ? length(local.azs) : 1
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
 
   tags = merge(var.tags, {
-    Name = "${var.name_prefix}-nat"
+    Name = "${var.name_prefix}-nat-${count.index + 1}"
   })
 
   depends_on = [aws_internet_gateway.this]
@@ -95,17 +98,19 @@ resource "aws_nat_gateway" "this" {
 
 # Private route table
 resource "aws_route_table" "private" {
+  count  = length(local.azs)
   vpc_id = aws_vpc.this.id
 
   tags = merge(var.tags, {
-    Name = "${var.name_prefix}-rt-private"
+    Name = "${var.name_prefix}-rt-private-${count.index + 1}"
   })
 }
 
 resource "aws_route" "private_to_nat" {
-  route_table_id         = aws_route_table.private.id
+  count                  = length(local.azs)
+  route_table_id         = aws_route_table.private[count.index].id
   destination_cidr_block = "0.0.0.0/0"
-  nat_gateway_id         = aws_nat_gateway.this.id
+  nat_gateway_id         = aws_nat_gateway.this[var.nat_gateway_per_az ? count.index : 0].id
 
   depends_on = [aws_nat_gateway.this]
 }
@@ -113,7 +118,7 @@ resource "aws_route" "private_to_nat" {
 resource "aws_route_table_association" "private" {
   count          = length(aws_subnet.private)
   subnet_id      = aws_subnet.private[count.index].id
-  route_table_id = aws_route_table.private.id
+  route_table_id = aws_route_table.private[count.index].id
 }
 
 # -----------------------------

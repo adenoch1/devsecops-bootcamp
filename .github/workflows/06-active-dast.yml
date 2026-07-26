@@ -1,0 +1,46 @@
+name: Scheduled authenticated active DAST
+
+on:
+  schedule:
+    - cron: "17 3 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  active-zap:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require isolated staging target
+        env:
+          TARGET: ${{ secrets.STAGING_URL }}
+        run: |
+          test -n "$TARGET"
+          case "$TARGET" in
+            *staging*|*stage*) ;;
+            *) echo "::error::Active DAST is restricted to a staging hostname"; exit 1 ;;
+          esac
+      - name: Configure authenticated scan context
+        env:
+          AUTH_TOKEN: ${{ secrets.DAST_AUTH_TOKEN }}
+          TARGET_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          test -n "$AUTH_TOKEN"
+          sed -e "s|__AUTH_TOKEN__|$AUTH_TOKEN|g" \
+              -e "s|__TARGET_URL__|$TARGET_URL|g" \
+              .zap/automation.yaml.tpl > .zap/automation.yaml
+      - name: ZAP active scan
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: ${{ secrets.STAGING_URL }}
+          rules_file_name: ".zap/rules.tsv"
+          cmd_options: "-z '-autorun /zap/wrk/.zap/automation.yaml'"
+          fail_action: true
+          allow_issue_writing: true
+      - name: Remove generated context
+        if: always()
+        run: rm -f .zap/automation.yaml

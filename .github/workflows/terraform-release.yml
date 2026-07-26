@@ -19,6 +19,12 @@ on:
         default: "deploy"
         type: choice
         options: [deploy, destroy]
+      environment:
+        description: "Isolated Terraform workspace to deploy"
+        required: true
+        default: "development"
+        type: choice
+        options: [development, staging, production]
       fqdn:
         description: "Custom domain to test (example: app.clevernews.org). Optional."
         required: false
@@ -42,6 +48,7 @@ env:
   TF_INPUT: "false"
   TF_VERSION: "1.6.6"
   WORKDIR: "infra/envs/dev"
+  TARGET_ENV: ${{ inputs.environment || 'development' }}
 
 jobs:
   ######################################################
@@ -51,7 +58,7 @@ jobs:
     name: Gate 1 — Infra Bootstrap (dev)
     if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.environment || 'development' }}
 
     defaults:
       run:
@@ -74,14 +81,16 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform init
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false
+          terraform workspace select "$TARGET_ENV" || terraform workspace new "$TARGET_ENV"
 
       - name: Terraform plan (bootstrap)
         run: |
           terraform plan \
             -out=tfplan.bootstrap \
+            -var-file="config/${TARGET_ENV}.tfvars" \
             -var="container_image_tag=bootstrap" \
-            -var="desired_count=0" \
             -var="alert_email=${{ secrets.ALERT_EMAIL }}"
 
       - name: Terraform apply (bootstrap)
@@ -117,6 +126,7 @@ jobs:
       dockerfile_path: "docker/Dockerfile"
       build_context: "."
       image_tag: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      environment: ${{ inputs.environment || 'development' }}
 
   #######################################################
   # Deploy: apply new image tag (scale ECS up)
@@ -126,7 +136,7 @@ jobs:
     needs: build_image
     if: ${{ github.event_name == 'push' || inputs.action == 'deploy' }}
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.environment || 'development' }}
 
     defaults:
       run:
@@ -149,14 +159,29 @@ jobs:
           terraform_version: ${{ env.TF_VERSION }}
 
       - name: Terraform init
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false
+          terraform workspace select "$TARGET_ENV" || terraform workspace new "$TARGET_ENV"
+
+      - name: Install cosign for deployment admission gate
+        uses: sigstore/cosign-installer@v3
+
+      - name: Enforce signed image before task registration
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMAGE="$(terraform output -raw ecr_repository_url):${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/adenoch1/devsecops-bootcamp/" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$IMAGE"
 
       - name: Terraform plan (deploy)
         run: |
           terraform plan \
             -out=tfplan.deploy \
+            -var-file="config/${TARGET_ENV}.tfvars" \
             -var="container_image_tag=${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}" \
-            -var="desired_count=1" \
             -var="git_sha=${{ github.sha }}" \
             -var="build_time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -var="alert_email=${{ secrets.ALERT_EMAIL }}"
