@@ -38,6 +38,12 @@ image to ECR" step:
    unverifiable, the build fails here instead of shipping an image no
    one can actually verify.
 
+The current release workflow also performs an independent verification
+immediately before Terraform registers the deployable task definition. This
+separates build-time sanity checking from deployment admission: an unsigned
+image or a signature from the wrong repository identity fails closed before
+CodeDeploy.
+
 Signed and attested **once, by digest** — every tag pushed in the same
 job (the deploy tag, and `bootstrap`/`latest` when applicable) points at
 the same manifest digest from one build, so one signature and one SBOM

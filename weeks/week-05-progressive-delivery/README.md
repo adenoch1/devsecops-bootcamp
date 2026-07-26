@@ -135,7 +135,8 @@ either.
 
 **Honest cost note**: at 2 AZs and 3 interface endpoints
 (~$0.01/hr × endpoint × AZ), this is roughly **$40–45/month** —
-comparable to or more than the single NAT gateway it doesn't replace
+comparable to or more than the development environment's single NAT gateway
+it doesn't replace
 (~$32–45/month, kept in place as a fallback for anything not covered by an
 endpoint). This is a security-posture improvement (task traffic to
 ECR/CloudWatch Logs never touches the public internet or NAT), not a cost

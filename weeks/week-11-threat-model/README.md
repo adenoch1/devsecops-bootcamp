@@ -28,16 +28,16 @@ the CI/CD pipeline and supply chain, and the account-level security
 baseline (Week 6) — plus a trust-boundaries diagram and an explicit
 Residual Risks section.
 
-The residual risks section is the part most worth reading closely: no
-WAF rate-based rule, a single NAT gateway (availability, not security),
-no automated secret rotation, ZAP baseline being passive-only (not a full
-active scan), no deploy-time signature *enforcement* (signatures exist
-and are checked in CI, but nothing blocks an unsigned image pushed
-outside the pipeline), the CDK repo's controls being verified "as
-designed" rather than "as running" since it has no live deployment right
-now, and the account security baseline being single-account/single-region
-by design. None of these are oversights — each is named with the
-reasoning for accepting it at this project's scale.
+The current residual risks section focuses on boundaries that code cannot
+honestly erase: AWS Organizations ownership for delegated multi-account
+administration, protecting direct ECS deployment permissions so the pipeline's
+Cosign admission gate cannot be bypassed, ensuring the staging DAST identity
+continues to cover new application roles, completing timed restore/failback
+exercises in addition to automated recovery-plan validation, and accumulating
+real traffic and on-call evidence over time. WAF rate limiting, per-AZ
+production NAT, autoscaling, scheduled secret rotation, authenticated active
+DAST, deploy-time signature verification, and all-region Security Hub
+aggregation are part of the current platform.
 
 Scope note: the threat model covers the shared architecture both
 `devsecops-bootcamp` and `devsecops-bootcamp-cdk` deploy — it isn't

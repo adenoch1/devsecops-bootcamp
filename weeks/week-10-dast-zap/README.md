@@ -15,6 +15,12 @@ What Changed
 `/health` to respond, then runs the official `zaproxy/action-baseline`
 against `http://localhost:5000`.
 
+**Current platform:** the passive local baseline remains the required PR gate.
+`.github/workflows/06-active-dast.yml` also runs a scheduled authenticated
+active scan against an isolated staging hostname. It requires a
+least-privilege `DAST_AUTH_TOKEN`, refuses a target that does not identify as
+staging, and sends active payloads only there.
+
 **Scans a locally-run copy of the image, not the live deployed app** —
 deliberately. A ZAP *baseline* scan is passive-only (crawls + inspects
 real responses, never sends attack payloads), so it's safe for CI either
@@ -94,6 +100,5 @@ What Was Achieved in Week 10
 ✔ Scans the exact image that ships to production, without the operational
   side effects of scanning the live system
 
-What's Next
-
-A written threat model — the last outstanding roadmap item.
+The current threat model and production operating model are linked from the
+repository root.

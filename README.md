@@ -17,6 +17,30 @@ This repository is designed for:
 > full architecture, every mitigation tied to real code, plus an honest
 > Residual Risks section naming what's *not* covered and why.
 
+> 📄 **[Production operating model](docs/PRODUCTION-READINESS.md)** — current
+> environment topology, scaling and WAF controls, artifact admission, SLOs,
+> performance testing, secret rotation, DNS, and disaster recovery.
+
+## Current Platform
+
+- Isolated `development`, `staging`, and `production` Terraform workspaces
+  with environment-scoped GitHub approvals and AWS credentials
+- Two-AZ VPC; staging and production use one NAT gateway per AZ, while
+  development retains one NAT as an explicit cost control
+- ECS target-tracking autoscaling: development 1–3 tasks, staging 2–6,
+  production 2–10
+- WAF managed rules plus per-IP rate-based blocking
+- Route 53 alias records managed by Terraform with target-health evaluation
+- Immutable ECR images, SPDX SBOM attestations, keyless Cosign signing, and a
+  second fail-closed signature check at the deployment boundary
+- PR-safe passive ZAP plus scheduled authenticated active DAST against staging
+- Scheduled k6 capacity baselines with p95/p99 and error-rate thresholds
+- Quarterly secret rotation followed by controlled ECS redeployment
+- 99.9% availability SLO, p95 latency target of 500 ms, four-hour RTO, and
+  one-hour RPO
+- All-region Security Hub finding aggregation with optional member accounts
+- Quarterly recovery validation and retained operational-evidence records
+
 ---
 
 ## What You’ll Learn
@@ -56,7 +80,9 @@ By the end of this bootcamp, you will understand how real teams:
 - **Alerts** — critical error alerts configured
 
 ### 4) Production Standards
-- **Branching Strategy** — feature branch → PR → `main` (protected, review + checks required). Single `dev` environment by design — a second, genuinely-tested `staging` environment would double AWS cost for a project with one contributor and no team to gate a promotion step between environments; not built, and this line used to imply otherwise.
+- **Branching Strategy** — feature branch → PR → protected `main`, followed
+  by controlled promotion through development, staging, and production
+  GitHub Environments
 - **Pull Requests** — approval + automated checks required
 - **Versioning** — weekly releases tagged clearly
 - **High Availability** — Multi-AZ when applicable
@@ -116,7 +142,7 @@ By the end of this bootcamp, you will understand how real teams:
 - Protected main (PR must pass)
 - Release workflow (apply after merge + approval)
 - HTTPS with ACM certificate
-- Domain: `app.clevernews.org` (GoDaddy DNS → ALB)
+- Domain: environment FQDN → Terraform-managed Route 53 alias → ALB
 
 📄 Notes: `weeks/week-03-opa-https/README.md`
 
@@ -166,6 +192,8 @@ By the end of this bootcamp, you will understand how real teams:
 - SSM Parameter Store (SecureString) + a dedicated KMS key, matching the existing per-purpose key convention
 - Injected via ECS's native `secrets` field, not plaintext `environment` — never appears in the task definition, plan output, or CloudWatch
 - Least-privilege: the execution role can read exactly this one parameter and decrypt exactly this one key
+- Quarterly rotation generates a new value without exposing it and initiates
+  a controlled deployment so replacement ECS tasks consume it
 
 📄 Notes: `weeks/week-09-secrets-management/README.md`
 
@@ -174,6 +202,8 @@ By the end of this bootcamp, you will understand how real teams:
 - Scans a locally-run copy of the exact production image, not the live ALB — avoids tripping the real app's own alarms/GuardDuty
 - 6 real findings (missing security headers), all genuinely fixed in `app/app.py`, not suppressed
 - One informational non-issue allowlisted with a written reason (`.zap/rules.tsv`)
+- Weekly authenticated active ZAP runs against the isolated staging target;
+  the PR baseline remains passive and local by design
 
 📄 Notes: `weeks/week-10-dast-zap/README.md`
 
@@ -202,6 +232,8 @@ This closes out the roadmap that started after Week 5.
 2. PR workflow runs: fmt/validate → tfsec/checkov → plan → OPA/Conftest
 3. If checks pass → PR can be merged
 4. Merge triggers release workflow → Terraform apply (with environment approval gate)
+5. The deployment job verifies the expected Cosign identity before task registration
+6. CodeDeploy shifts blue/green traffic with alarm-triggered rollback
 
 ---
 

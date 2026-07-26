@@ -55,6 +55,8 @@ Steps:
 Command:
 ```bash
 pytest -q app/tests
+```
+
 If tests fail, the pull request is blocked.
 
 2) Security Workflow – SAST + Dependency + FS Scan (02-security.yml)

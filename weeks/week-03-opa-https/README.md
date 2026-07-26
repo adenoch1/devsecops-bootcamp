@@ -2,6 +2,11 @@ DevSecOps Project – Week 3
 Governance & Policy as Code with OPA, Conftest, and Secure HTTPS Architecture
 Overview
 
+> **Current platform note:** this chapter records the original Week 3 DNS
+> setup. Current deployments manage environment aliases through Route 53 in
+> Terraform with target-health evaluation; the registrar is no longer a
+> per-release manual DNS dependency.
+
 In Week 3 of this DevSecOps project series, we move from security scanning to security enforcement.
 
 Week 1 focused on application CI security:

@@ -90,6 +90,7 @@ All other Terraform environments (dev, prod) use the **remote backend created he
    ```bash
    terraform init
    terraform apply
+   ```
 
 Capture the outputs:
 State bucket name
@@ -98,6 +99,7 @@ KMS key ARNs
 
 Reference these outputs in environment backends:
 
+```hcl
 backend "s3" {
   bucket         = "devsecops-testing-tfstate-enoch-2026"
   key            = "dev/envs/terraform.tfstate"
@@ -106,7 +108,7 @@ backend "s3" {
   encrypt        = true
   kms_key_id     = "<tfstate-kms-key-arn>"
 }
-
+```
 
 CI/CD pipelines now safely run Terraform using the remote backend.
 

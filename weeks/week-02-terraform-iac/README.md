@@ -225,26 +225,43 @@ terraform fmt -recursive
 terraform validate
 terraform plan
 terraform apply
+```
+
 Show Terraform-managed resources:
 
+```bash
 terraform state list
+```
+
 Get ALB DNS name:
 
+```bash
 terraform output -raw alb_dns_name
+```
+
 Open the ALB DNS in a browser and confirm the app responds.
 
 Push Image to ECR (Connect Week 1 → Week 2)
 Login Docker to ECR:
 
+```bash
 aws ecr get-login-password --region ca-central-1 \
   | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ca-central-1.amazonaws.com
+```
+
 Build and tag the image:
 
+```bash
 docker build -f docker/Dockerfile \
   -t <ACCOUNT_ID>.dkr.ecr.ca-central-1.amazonaws.com/<ECR_REPO_NAME>:latest .
+```
+
 Push to ECR:
 
+```bash
 docker push <ACCOUNT_ID>.dkr.ecr.ca-central-1.amazonaws.com/<ECR_REPO_NAME>:latest
+```
+
 ECS pulls this image using the task execution role.
 
 Week 2 Wrap-Up

@@ -30,7 +30,8 @@ execution role):
 2. **`random_password.flask_secret_key`** — generated once by Terraform,
    never typed anywhere in code. Stored in Terraform state, which is
    already KMS-encrypted via the S3 backend (`infra/bootstrap/main.tf`).
-   Rotating it is a `terraform taint` + apply away.
+   Terraform owns initial creation; subsequent value changes are ignored so
+   the scheduled rotation workflow is not reverted by a later plan.
 3. **`aws_ssm_parameter.flask_secret_key`** — `SecureString`, encrypted
    with the dedicated key above.
 4. **An inline IAM policy on the ECS *task execution* role** (not the
@@ -76,7 +77,8 @@ What Was Achieved in Week 9
   parameter and decrypt exactly this one key, nothing broader
 ✔ The README's multi-week-old "upcoming" note is finally true
 
-What's Next
+Current lifecycle: `.github/workflows/08-secret-rotation.yml` replaces the
+SecureString quarterly without printing it, then dispatches the protected
+production deployment. Replacement ECS tasks fetch the new value at startup.
 
-ZAP (dynamic application security testing) and a written threat model —
-the two roadmap items still outstanding after this week.
+The current DAST and threat-model documentation lives in Weeks 10 and 11.
